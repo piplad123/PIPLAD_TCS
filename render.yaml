@@ -1,0 +1,63 @@
+services:
+  - type: web
+    name: piplad-api
+    runtime: python
+    rootDir: backend
+    buildCommand: pip install --upgrade pip && pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: DATABASE_URL
+        value: postgresql+psycopg://piplad_db_user:v6n1ZS3GB91r1kYEOAcmAYDw7ncMXQX2@dpg-da8sqlk9v7es73cgu6hg-a.oregon-postgres.render.com/piplad_db?sslmode=require
+      - key: CORS_ORIGINS
+        value: http://localhost:5173,https://www.pip-dev.in,https://pip-found.pages.dev,https://pip-dev.onrender.com,https://pip-found-frontend.onrender.com,https://pipladfoundation.in,https://www.pipladfoundation.in
+      - key: RAZORPAY_KEY_ID
+        value: rzp_test_TZEtC3OHZZibvB
+      - key: RAZORPAY_KEY_SECRET
+        value: AWHDjijjgeWdmIVPFYFle52p
+      - key: RAZORPAY_MODE
+        value: mock
+      - key: CLOUDINARY_CLOUD_NAME
+        value: dpxev3aj
+      - key: CLOUDINARY_API_KEY
+        value: 381893617789635
+      - key: CLOUDINARY_API_SECRET
+        value: kuGNl0fNJ7lZnpuWy14auTh3G_E
+      # Brevo is the only email transport (HTTPS API, port 443; Render free
+      # blocks outbound SMTP ports). Generate the key at
+      # https://app.brevo.com/settings/keys/api and set it in the Render
+      # dashboard so the real value is never committed to the repo.
+      - key: BREVO_API_KEY
+        sync: false
+        value: CHANGE_ME
+      - key: EMAIL_FROM
+        value: info@pipladfoundation.in
+      - key: EMAIL_FROM_NAME
+        value: Piplad Welfare Foundation
+      - key: CONTACT_WEBSITE
+        sync: false
+        value: https://pipladfoundation.in
+      - key: CONTACT_EMAIL
+        sync: false
+        value: info@pipladfoundation.in
+      # Public frontend URL embedded in certificate / volunteer-card QR codes.
+      # Must be the deployed frontend domain so scans open the correct site.
+      - key: PUBLIC_FRONTEND_URL
+        sync: false
+        value: https://pipladfoundation.in
+
+  - type: web
+    name: pip-found-frontend
+    runtime: static
+    rootDir: frontend
+    buildCommand: npm ci && npm run build
+    staticPublishPath: dist
+    domains:
+      - pipladfoundation.in
+      - www.pipladfoundation.in
+    envVars:
+      - key: VITE_API_URL
+        value: https://piplad-api.onrender.com/api
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html

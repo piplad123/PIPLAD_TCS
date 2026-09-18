@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="468px" height="138px" viewBox="0 0 468 138" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+    <!-- Generator: Sketch 56.3 (81716) - https://sketch.com -->
+
+    <desc>Created with Sketch.</desc>
+    <g id="Wireframes" stroke="none" stroke-width="1" fill="none" fill-rule="evenodd">
+        <g id="Artboard" transform="translate(-526.000000, -210.000000)">
+            <g id="Group-2" transform="translate(526.658113, 210.000000)">
+                <path d="M3.63797881e-12,136.607302 L211.3659,136.607302 C232.866042,136.607302 253.79369,129.677913 271.045288,116.84676 L386.116704,31.260542 C403.368302,18.4293885 424.29595,11.5 445.796093,11.5 L452.713175,11.5" id="Path-3" stroke="#4788F4" stroke-width="2"></path>
+                <g id="noun_Arrow_761354" transform="translate(460.341887, 11.500000) rotate(-90.000000) translate(-460.341887, -11.500000) translate(449.341887, 4.000000)" fill="#4788F4">
+                    <g id="Group">
+                        <g id="Path">
+                            <path d="M20.0700169,0 C21.6095152,0 22.0625447,0.967573541 21.0826223,2.1602407 L11.3488121,14.0072965 C10.9136585,14.5369236 10.2173661,14.5304908 9.79134252,13.9900655 L0.494153551,2.19626638 C-0.462040414,0.983301964 0.0117040841,0 1.55031947,0 L20.0700169,0 Z"></path>
+                        </g>
+                    </g>
+                </g>
+            </g>
+        </g>
+    </g>
+</svg>
