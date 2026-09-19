@@ -7,7 +7,7 @@ import { resolveMediaUrl } from "../../api";
 const MentorsSection = ({ data = null }) => {
   const fallback = mentorsData;
 
-  const mentors = Array.isArray(data)
+  const mentors = Array.isArray(data) && data.length > 0
     ? data
     : fallback.mentors;
 
@@ -20,10 +20,8 @@ const MentorsSection = ({ data = null }) => {
 
   const mentor = mentors[safeIndex];
 
-  const mentorImage = data
-    ? mentor.image_url
-      ? resolveMediaUrl(mentor.image_url)
-      : fallback.mentors[safeIndex]?.image || '/piplad-logo.jpg'
+  const mentorImage = mentor?.image_url
+    ? resolveMediaUrl(mentor.image_url)
     : fallback.mentors[safeIndex]?.image || '/piplad-logo.jpg';
 
   const fallbackMentor =
