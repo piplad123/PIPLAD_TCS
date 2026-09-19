@@ -1,5 +1,5 @@
 import { useState, useEffect, Suspense, lazy } from 'react';
-import { BrowserRouter as Router, Routes, Route, useLocation } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import Header from './components/Header';
 import Footer from './components/Footer';
 import DonateModal from './components/DonateModal';
@@ -101,6 +101,7 @@ export default function App() {
               <Route path="/verify/certificate/:identifier" element={<VerifyCertificate />} />
               <Route path="/verify/:identifier" element={<VerifyCertificate />} />
               <Route path="/verify/volunteer/:identifier" element={<VerifyVolunteer />} />
+              <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
           </Suspense>
         </main>
