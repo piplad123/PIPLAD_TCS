@@ -9,7 +9,7 @@ services:
       - key: DATABASE_URL
         value: postgresql+psycopg://piplad_db_user:v6n1ZS3GB91r1kYEOAcmAYDw7ncMXQX2@dpg-da8sqlk9v7es73cgu6hg-a.oregon-postgres.render.com/piplad_db?sslmode=require
       - key: CORS_ORIGINS
-        value: http://localhost:5173,https://www.pip-dev.in,https://pip-found.pages.dev,https://pip-dev.onrender.com,https://pip-found-frontend.onrender.com,https://pipladfoundation.in,https://www.pipladfoundation.in
+        value: http://localhost:5173,https://www.pip-dev.in,https://pip-found.pages.dev,https://pip-dev.onrender.com,https://pip-found-frontend.onrender.com,https://pipladfoundation.in,https://www.pipladfoundation.in,https://piplad-tcs-ui.onrender.com
       - key: RAZORPAY_KEY_ID
         value: rzp_test_TZEtC3OHZZibvB
       - key: RAZORPAY_KEY_SECRET
