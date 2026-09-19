@@ -16,8 +16,10 @@ if not DATABASE_URL:
         "postgresql+psycopg://user:password@host:5432/dbname?sslmode=require"
     )
 
-if DATABASE_URL.startswith("postgres://"):
-    DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql+psycopg://", 1)
+for prefix in ("postgresql+psycopg2://", "postgresql://", "postgres://"):
+    if DATABASE_URL.startswith(prefix):
+        DATABASE_URL = DATABASE_URL.replace(prefix, "postgresql+psycopg://", 1)
+        break
 
 connect_args = {}
 if DATABASE_URL.startswith("postgres") and "sslmode" not in DATABASE_URL:
