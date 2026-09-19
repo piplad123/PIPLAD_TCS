@@ -591,6 +591,16 @@ CORS_ORIGINS = [
     if origin.strip()
 ]
 
+# If CORS_ORIGINS is not configured on the deployed service, fall back to a
+# sensible default list so the browser is not silently blocked ("Failed to
+# fetch") by an absent Access-Control-Allow-Origin header.
+if not CORS_ORIGINS:
+    CORS_ORIGINS = [
+        "http://localhost:5173",
+        "http://localhost:5174",
+        "https://piplad-tcs-ui.onrender.com",
+    ]
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=CORS_ORIGINS,
