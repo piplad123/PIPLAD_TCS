@@ -599,6 +599,8 @@ if not CORS_ORIGINS:
         "http://localhost:5173",
         "http://localhost:5174",
         "https://piplad-tcs-ui.onrender.com",
+        "https://pipladfoundation.in",
+        "https://www.pipladfoundation.in",
     ]
 
 app.add_middleware(
