@@ -17,12 +17,14 @@ from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.pdfgen import canvas as pdf_canvas
 
-ORG_NAME = "Piplad Welfare Foundation"
-ORG_TAGLINE = "Creating Opportunities, Creating Lives"
-ORG_DETAILS = (
-    "Registered under the Indian Trusts Act. Donations are eligible for "
-    "50% deduction under Section 80G of the Income Tax Act, 1961."
-)
+from .org_profile import ORG_DETAILS, ORG_NAME, ORG_TAGLINE
+
+__all__ = [
+    "ORG_DETAILS",
+    "ORG_NAME",
+    "ORG_TAGLINE",
+    "build_donation_receipt_pdf",
+]
 
 EMERALD = colors.HexColor("#059669")
 LIME = colors.HexColor("#65a30d")

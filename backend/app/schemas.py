@@ -1,7 +1,7 @@
 from datetime import date, datetime
 from typing import List, Optional
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class CauseBase(BaseModel):
@@ -9,8 +9,10 @@ class CauseBase(BaseModel):
     category: Optional[str] = "General"
     short_description: str
     full_description: Optional[str] = None
-    target_amount: float
-    raised_amount: Optional[float] = 0.0
+    target_amount: float = Field(ge=0)
+    # Raised amount is maintained by the donation flow, but admins can also
+    # override it manually (e.g. to fold in offline/cash receipts).
+    raised_amount: float = Field(default=0.0, ge=0)
     image_url: Optional[str] = None
 
 
@@ -197,6 +199,8 @@ class BlogBase(BaseModel):
 
 class BlogResponse(BlogBase):
     id: int
+    slug: str
+    source_url: Optional[str] = None
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
@@ -232,10 +236,18 @@ class ImpactMetricResponse(BaseModel):
 
 
 class ImpactMetricUpdate(BaseModel):
-    value: float
-    is_published: bool = True
+    # Identity is mandatory. Updates are matched on metric_key, never on list
+    # position -- positional matching silently wrote values onto the wrong
+    # rows because the read order and the write order were not the same.
+    metric_key: str = Field(min_length=1, max_length=100)
+    value: float = Field(ge=0)
+    # Optional (not defaulted to True) so a partial update cannot silently
+    # re-publish a metric the admin chose to hide.
+    is_published: Optional[bool] = None
     metric_name: Optional[str] = None
     description: Optional[str] = None
+
+    model_config = ConfigDict(extra="ignore")
 
 
 class ImpactMetricsUpdateRequest(BaseModel):

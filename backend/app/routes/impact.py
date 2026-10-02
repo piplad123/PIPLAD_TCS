@@ -1,4 +1,5 @@
 from datetime import datetime
+from decimal import Decimal
 from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -108,13 +109,26 @@ def _round_to_int(value) -> float:
 
 
 def _ensure_metrics(db: Session) -> None:
-    """Seed the default catalog if the table is empty."""
-    existing = db.query(ImpactMetric).count()
+    """Seed the default catalog, and repair it if any keys are missing.
 
-    if existing > 0:
+    Only returning early when the table is completely empty left a
+    partially-populated table permanently broken.
+    """
+    existing_keys = {
+        key
+        for (key,) in db.query(ImpactMetric.metric_key).all()
+    }
+
+    missing = [
+        item
+        for item in DEFAULT_METRICS
+        if item["metric_key"] not in existing_keys
+    ]
+
+    if not missing:
         return
 
-    for item in DEFAULT_METRICS:
+    for item in missing:
         db.add(
             ImpactMetric(
                 metric_key=item["metric_key"],
@@ -257,40 +271,91 @@ def update_impact_metrics(
 ):
     _ensure_metrics(db)
 
-    metrics = db.query(ImpactMetric).all()
+    # Keyed lookup. Row order is irrelevant, so a metric can only ever be
+    # written to the row the admin actually edited.
+    rows = {
+        metric.metric_key: metric
+        for metric in db.query(ImpactMetric).all()
+    }
 
-    if len(payload.metrics) > len(metrics):
+    unknown = [
+        update.metric_key
+        for update in payload.metrics
+        if update.metric_key not in rows
+    ]
+
+    if unknown:
         raise HTTPException(
             status_code=400,
-            detail="Too many metrics provided.",
+            detail=(
+                "Unknown metric_key(s): "
+                f"{', '.join(sorted(set(unknown)))}"
+            ),
         )
 
-    for i, update in enumerate(payload.metrics):
-        metric = metrics[i]
+    seen = set()
+    now = datetime.utcnow()
 
-        metric.value = update.value
-
-        if update.is_published is not None:
-            metric.is_published = bool(update.is_published)
-
-        if update.metric_name is not None:
-            metric.metric_name = update.metric_name.strip()
-
-        if update.description is not None:
-            metric.description = (
-                update.description.strip()
-                or None
+    # Validate the entire payload before touching any row, so a rejected
+    # request cannot leave the session holding a half-applied update.
+    for update in payload.metrics:
+        if update.metric_key in seen:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "Duplicate metric_key in payload: "
+                    f"{update.metric_key}"
+                ),
             )
 
-        # last_updated refreshes automatically via onupdate,
-        # but update it explicitly so the timestamp is reliable
-        # even if the value itself did not change.
-        metric.last_updated = datetime.utcnow()
+        seen.add(update.metric_key)
+
+        if update.value < 0:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "Impact value for "
+                    f"'{update.metric_key}' cannot be negative."
+                ),
+            )
+
+    for update in payload.metrics:
+        metric = rows[update.metric_key]
+        changed = False
+
+        if _round_to_int(metric.value) != update.value:
+            # Numeric columns come back as Decimal on PostgreSQL but as float
+            # on SQLite; Decimal(str(...)) keeps both consistent.
+            metric.value = Decimal(str(update.value))
+            changed = True
+
+        if (
+            update.is_published is not None
+            and bool(metric.is_published) != bool(update.is_published)
+        ):
+            metric.is_published = bool(update.is_published)
+            changed = True
+
+        if update.metric_name is not None:
+            new_name = update.metric_name.strip()
+
+            if new_name and new_name != metric.metric_name:
+                metric.metric_name = new_name
+                changed = True
+
+        if update.description is not None:
+            new_description = update.description.strip() or None
+
+            if new_description != metric.description:
+                metric.description = new_description
+                changed = True
+
+        # Only stamp rows that actually changed, otherwise "last updated"
+        # on the public Impact page stops meaning anything.
+        if changed:
+            metric.last_updated = now
 
     db.commit()
-
-    for metric in metrics:
-        db.refresh(metric)
 
     return (
         db.query(ImpactMetric)

@@ -15,20 +15,33 @@ logger = logging.getLogger(__name__)
 # ============================================================
 # Card geometry (720 x 1180 px portrait)
 # ============================================================
+# The card is split 60/40. The identity zone (header, photo, name) takes the
+# upper ~60% so the face is large and recognisable; the details box, QR code
+# and footer are packed into the lower ~40%.
 CARD_W = 720
 CARD_H = 1180
 
-HEADER_H = 150
-PHOTO_DIAM = 130
-PHOTO_RING = 6
-PHOTO_CENTER_Y = 215
+HEADER_H = 130
 
-DETAILS_TOP = 392
-DETAILS_HEIGHT = 372
-ROW_HEIGHT = 62
+# --- Identity zone (~60% of the sheet) -----------------------------------
+PHOTO_DIAM = 400
+PHOTO_RING = 14
+PHOTO_CENTER_Y = 380
 
-QR_SIZE = 200
-QR_TOP = 790
+NAME_CENTER_Y = 628
+NAME_SIZE = 60
+NAME_MIN_SIZE = 30
+NAME_MAX_LINES = 2
+NAME_RULE_Y = 716
+
+# --- Details zone (~40% of the sheet) ------------------------------------
+DETAILS_TOP = 748
+DETAILS_HEIGHT = 152
+DETAIL_ROW_TOP = 12
+DETAIL_ROW_STEP = 72
+
+QR_SIZE = 128
+QR_TOP = 918
 QR_CENTER_X = CARD_W // 2
 
 FOOTER_TOP = 1110
@@ -125,6 +138,64 @@ def _draw_centered(
     draw.text((center_x, center_y), text, font=font, fill=color, anchor=anchor)
 
 
+def _fit_wrapped(
+    draw: ImageDraw.ImageDraw,
+    text: str,
+    size: int,
+    max_width: int,
+    max_lines: int,
+    min_size: int,
+) -> tuple[list[str], int]:
+    """Wrap ``text`` to ``max_width``, shrinking only as far as ``min_size``.
+
+    Long names balance across two lines instead of being squashed into one
+    unreadably thin line.
+    """
+    words = text.split()
+    if not words:
+        return [""], size
+
+    while True:
+        font = _load_pair(size)[0]
+        lines: list[str] = []
+        current = words[0]
+        for word in words[1:]:
+            trial = f"{current} {word}"
+            if draw.textlength(trial, font=font) <= max_width:
+                current = trial
+            else:
+                lines.append(current)
+                current = word
+        lines.append(current)
+
+        too_wide = any(draw.textlength(line, font=font) > max_width for line in lines)
+        if (not too_wide and len(lines) <= max_lines) or size <= min_size:
+            return lines, size
+        size -= 2
+
+
+def _draw_centered_wrapped(
+    draw: ImageDraw.ImageDraw,
+    text: str,
+    center_x: int,
+    center_y: int,
+    size: int,
+    color,
+    max_width: int,
+    max_lines: int = 2,
+    min_size: int = 26,
+) -> int:
+    """Draw ``text`` as up to ``max_lines`` centered lines. Returns the size."""
+    lines, size = _fit_wrapped(draw, text, size, max_width, max_lines, min_size)
+    font = _load_pair(size)[0]
+    gap = int(size * 1.12)
+    y = center_y - ((len(lines) - 1) * gap) / 2
+    for line in lines:
+        draw.text((center_x, y), line, font=font, fill=color, anchor="mm")
+        y += gap
+    return size
+
+
 def _photo_layer(
     photo_bytes: bytes | None,
     full_name: str,
@@ -163,7 +234,7 @@ def _draw_initials_avatar(layer: Image.Image, full_name: str) -> None:
         (PHOTO_RING, PHOTO_RING, PHOTO_DIAM - 1 - PHOTO_RING, PHOTO_DIAM - 1 - PHOTO_RING),
         fill=AVATAR_BG,
     )
-    bold, _ = _load_pair(58)
+    bold, _ = _load_pair(max(24, int(PHOTO_DIAM * 0.34)))
     initials = _initials(full_name)
     draw.text((PHOTO_DIAM / 2, PHOTO_DIAM / 2), initials, font=bold, fill=AVATAR_TEXT, anchor="mm")
 
@@ -184,14 +255,14 @@ def build_team_card_jpg(
 
     # Header band
     draw.rectangle((0, 0, CARD_W, HEADER_H), fill=SLATE)
-    badge_w, badge_h = 232, 30
-    badge_box = ((CARD_W - badge_w) // 2, 32, (CARD_W + badge_w) // 2, 32 + badge_h)
-    draw.rounded_rectangle(badge_box, radius=15, fill=LIME_BADGE)
+    badge_w, badge_h = 232, 28
+    badge_box = ((CARD_W - badge_w) // 2, 26, (CARD_W + badge_w) // 2, 26 + badge_h)
+    draw.rounded_rectangle(badge_box, radius=14, fill=LIME_BADGE)
     badge_font = _load_pair(11)[0]
     badge_text = "PIPLAD WELFARE FOUNDATION"
     bbox = draw.textbbox((0, 0), badge_text, font=badge_font)
     draw.text(
-        ((CARD_W - (bbox[2] - bbox[0])) / 2 - bbox[0], 32 + (badge_h - (bbox[3] - bbox[1])) / 2 - bbox[1]),
+        ((CARD_W - (bbox[2] - bbox[0])) / 2 - bbox[0], 26 + (badge_h - (bbox[3] - bbox[1])) / 2 - bbox[1]),
         badge_text,
         font=badge_font,
         fill=(255, 255, 255),
@@ -200,7 +271,7 @@ def build_team_card_jpg(
         draw,
         "TEAM MEMBER ID CARD",
         CARD_W // 2,
-        104,
+        94,
         13,
         LIME_BRIGHT,
         CARD_W - 2 * MARGIN_X,
@@ -215,9 +286,41 @@ def build_team_card_jpg(
     )
 
     name = _clean(full_name) or "Team Member"
-    _draw_centered(draw, name, CARD_W // 2, 306, 30, INK, CARD_W - 2 * MARGIN_X)
+    name_size = _draw_centered_wrapped(
+        draw,
+        name,
+        CARD_W // 2,
+        NAME_CENTER_Y,
+        NAME_SIZE,
+        INK,
+        CARD_W - 2 * MARGIN_X,
+        max_lines=NAME_MAX_LINES,
+        min_size=NAME_MIN_SIZE,
+    )
 
-    # Details box
+    # Accent rule + diamond under the name.
+    rule_w = min(250, int(name_size * 3.6))
+    draw.line(
+        (CARD_W // 2 - rule_w, NAME_RULE_Y, CARD_W // 2 - 26, NAME_RULE_Y),
+        fill=LIME_BADGE,
+        width=5,
+    )
+    draw.line(
+        (CARD_W // 2 + 26, NAME_RULE_Y, CARD_W // 2 + rule_w, NAME_RULE_Y),
+        fill=LIME_BADGE,
+        width=5,
+    )
+    draw.polygon(
+        [
+            (CARD_W // 2 - 10, NAME_RULE_Y),
+            (CARD_W // 2, NAME_RULE_Y - 10),
+            (CARD_W // 2 + 10, NAME_RULE_Y),
+            (CARD_W // 2, NAME_RULE_Y + 10),
+        ],
+        fill=LIME_BADGE,
+    )
+
+    # Details box: two columns keep the compressed 40% zone legible.
     box_left, box_right = MARGIN_X, CARD_W - MARGIN_X
     box_bottom = DETAILS_TOP + DETAILS_HEIGHT
     draw.rounded_rectangle(
@@ -227,26 +330,45 @@ def build_team_card_jpg(
         outline=BOX_BORDER,
         width=2,
     )
-    rows = [
-        ("Member ID", _clean(member_id) or "PWF-MEMBER"),
-        ("Role", _clean(role) or "—"),
-        ("Team", _clean(team) or "General"),
-        ("Joined", _format_date(joined_date)),
+    inner_left = box_left + 22
+    inner_right = box_right - 22
+    col_gap = 20
+    col_w = (inner_right - inner_left - col_gap) / 2
+    col_x = (inner_left, inner_left + col_w + col_gap)
+    row_top = DETAILS_TOP + DETAIL_ROW_TOP
+    row_baselines = (row_top, row_top + DETAIL_ROW_STEP)
+
+    draw.line(
+        (box_left + 12, row_top + 30, box_right - 12, row_top + 30),
+        fill=BOX_BORDER,
+        width=1,
+    )
+    draw.line(
+        (col_x[1] - col_gap // 2, row_top, col_x[1] - col_gap // 2, box_bottom - 14),
+        fill=BOX_BORDER,
+        width=1,
+    )
+
+    cells = [
+        (0, 0, "Member ID", _clean(member_id) or "PWF-MEMBER"),
+        (1, 0, "Role", _clean(role) or "—"),
+        (0, 1, "Team", _clean(team) or "General"),
+        (1, 1, "Joined", _format_date(joined_date)),
     ]
-    row_top = DETAILS_TOP + 6
-    for idx, (label, value) in enumerate(rows):
-        y = row_top + idx * ROW_HEIGHT
-        label_font = _load_pair(11)[0]
-        value_font = _load_pair(17)[0]
-        draw.text((box_left + 20, y + 8), label.upper(), font=label_font, fill=MUTED)
-        value_color = GREEN if label == "Member ID" else INK
-        draw.text((box_left + 20, y + 26), value, font=value_font, fill=value_color)
-        if idx < len(rows) - 1:
-            draw.line(
-                (box_left + 20, y + ROW_HEIGHT - 1, box_right - 20, y + ROW_HEIGHT - 1),
-                fill=BOX_BORDER,
-                width=1,
-            )
+    for col, row, label, value in cells:
+        x = int(col_x[col])
+        y = row_baselines[row]
+        label_font = _load_pair(10)[0]
+        value_font = _load_pair(15)[0]
+        while value_font.size > 11 and draw.textlength(value, font=value_font) > col_w:
+            value_font = _load_pair(value_font.size - 1)[0]
+        draw.text((x, y), label.upper(), font=label_font, fill=MUTED)
+        draw.text(
+            (x, y + 26),
+            value,
+            font=value_font,
+            fill=GREEN if label == "Member ID" else INK,
+        )
 
     # QR block
     if qr_png:
@@ -261,7 +383,7 @@ def build_team_card_jpg(
             f"Scan to verify: {_clean(member_id) or 'PWF-MEMBER'}",
             QR_CENTER_X,
             QR_TOP + QR_SIZE + 18,
-            16,
+            14,
             INK,
             CARD_W - 2 * MARGIN_X,
         )

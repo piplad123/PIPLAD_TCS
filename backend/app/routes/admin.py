@@ -8,7 +8,8 @@ import uuid
 import cloudinary
 import cloudinary.uploader
 
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
+from decimal import Decimal
 from pathlib import Path
 from typing import List, Optional
 
@@ -31,6 +32,7 @@ from sqlalchemy.orm import Session
 from ..database import SessionLocal, get_db
 
 from ..models import (
+    Blog,
     Cause,
     Certificate,
     ContactInquiry,
@@ -49,6 +51,7 @@ from ..models import (
 )
 
 from ..schemas import (
+    BlogResponse,
     CertificateResponse,
     CauseResponse,
     DonationListResponse,
@@ -677,6 +680,7 @@ def create_admin_cause(
     category: Optional[str] = Form(None),
     full_description: Optional[str] = Form(None),
     target_amount: Optional[float] = Form(None),
+    raised_amount: Optional[float] = Form(None),
     file: Optional[UploadFile] = File(None),
     db: Session = Depends(get_db),
     _: str = Depends(get_current_admin),
@@ -688,6 +692,9 @@ def create_admin_cause(
         raise HTTPException(400, "Cause title is required")
     if not short_description:
         raise HTTPException(400, "Cause short description is required")
+
+    if raised_amount is not None and raised_amount < 0:
+        raise HTTPException(400, "Amount raised cannot be negative")
 
     image_url = None
 
@@ -701,7 +708,11 @@ def create_admin_cause(
         short_description=short_description,
         full_description=(full_description or "").strip() or None,
         target_amount=target_amount or 0,
-        raised_amount=0.0,
+        raised_amount=(
+            Decimal(str(raised_amount))
+            if raised_amount is not None
+            else Decimal("0")
+        ),
         image_url=image_url,
     )
 
@@ -723,6 +734,7 @@ def update_admin_cause(
     category: Optional[str] = Form(None),
     full_description: Optional[str] = Form(None),
     target_amount: Optional[float] = Form(None),
+    raised_amount: Optional[float] = Form(None),
     remove_image: bool = Form(False),
     file: Optional[UploadFile] = File(None),
     db: Session = Depends(get_db),
@@ -745,6 +757,9 @@ def update_admin_cause(
     if not short_description:
         raise HTTPException(400, "Cause short description is required")
 
+    if raised_amount is not None and raised_amount < 0:
+        raise HTTPException(400, "Amount raised cannot be negative")
+
     old_image = cause.image_url
     old_title = cause.title
 
@@ -757,6 +772,12 @@ def update_admin_cause(
     cause.short_description = short_description
     cause.full_description = (full_description or "").strip() or None
     cause.target_amount = target_amount or 0
+
+    # donation.py only ever *adds* to raised_amount, so an admin-supplied value
+    # acts as a correction to the running total. Leaving the field blank keeps
+    # whatever the donation flow has accumulated.
+    if raised_amount is not None:
+        cause.raised_amount = Decimal(str(raised_amount))
 
     if file and file.filename:
         cause.image_url = _upload_image(file, "causes")
@@ -2791,3 +2812,214 @@ def delete_footer_quick_link(
     db.delete(link)
     db.commit()
     return {"message": "Footer quick link deleted"}
+
+
+# ============================================================
+# BLOG ADMIN
+# ============================================================
+# Publishing is derived from ``Blog.published_date``: a NULL date is a draft
+# and is hidden from the public blog routes. No schema change is required.
+
+def _unique_blog_slug(
+    db: Session,
+    title: str,
+    exclude_id: Optional[int] = None,
+) -> str:
+    base = _slugify(title) or "blog"
+    slug = base
+    counter = 1
+
+    while True:
+        query = db.query(Blog).filter(Blog.slug == slug)
+        if exclude_id:
+            query = query.filter(Blog.id != exclude_id)
+        if not query.first():
+            return slug
+        counter += 1
+        slug = f"{base}-{counter}"
+
+
+def _parse_datetime_value(value: Optional[str], field_name: str):
+    if value is None:
+        return None
+
+    text = str(value).strip()
+    if not text:
+        return None
+
+    try:
+        parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
+    except ValueError:
+        raise HTTPException(
+            400,
+            f"{field_name} must be a valid ISO date/time",
+        )
+
+    if parsed.tzinfo is not None:
+        parsed = parsed.astimezone(timezone.utc).replace(tzinfo=None)
+
+    return parsed
+
+
+def _resolve_blog_publish(published: bool, published_date: Optional[str]):
+    """A supplied date publishes the post with that timestamp; otherwise a
+    checked ``published`` flag stamps it now and an unchecked one drafts it."""
+    explicit = _parse_datetime_value(published_date, "published_date")
+    if explicit:
+        return explicit
+    return datetime.utcnow() if published else None
+
+
+@router.get("/blog", response_model=List[BlogResponse])
+def get_admin_blog_posts(
+    db: Session = Depends(get_db),
+    _: str = Depends(get_current_admin),
+):
+    # Drafts are included here so the admin can manage and publish them.
+    return (
+        db.query(Blog)
+        .order_by(Blog.created_at.desc(), Blog.id.desc())
+        .all()
+    )
+
+
+@router.post("/blog", response_model=BlogResponse)
+def create_admin_blog_post(
+    title: str = Form(...),
+    content: str = Form(...),
+    summary: Optional[str] = Form(None),
+    category: Optional[str] = Form(None),
+    meta_description: Optional[str] = Form(None),
+    source_url: Optional[str] = Form(None),
+    published: bool = Form(False),
+    published_date: Optional[str] = Form(None),
+    file: Optional[UploadFile] = File(None),
+    db: Session = Depends(get_db),
+    _: str = Depends(get_current_admin),
+):
+    title = (title or "").strip()
+    content = (content or "").strip()
+
+    if not title:
+        raise HTTPException(400, "Blog title is required")
+    if not content:
+        raise HTTPException(400, "Blog content is required")
+
+    image_url = _upload_image(file, "blog") if file and file.filename else None
+
+    post = Blog(
+        title=title,
+        slug=_unique_blog_slug(db, title),
+        summary=(summary or "").strip() or None,
+        content=content,
+        category=(category or "").strip() or "General",
+        meta_description=(meta_description or "").strip() or None,
+        source_url=(source_url or "").strip() or None,
+        image_url=image_url,
+        published_date=_resolve_blog_publish(published, published_date),
+    )
+
+    db.add(post)
+    db.commit()
+    db.refresh(post)
+
+    return post
+
+
+@router.put("/blog/{blog_id}", response_model=BlogResponse)
+def update_admin_blog_post(
+    blog_id: int,
+    title: str = Form(...),
+    content: str = Form(...),
+    summary: Optional[str] = Form(None),
+    category: Optional[str] = Form(None),
+    meta_description: Optional[str] = Form(None),
+    source_url: Optional[str] = Form(None),
+    published: Optional[bool] = Form(None),
+    published_date: Optional[str] = Form(None),
+    remove_image: bool = Form(False),
+    file: Optional[UploadFile] = File(None),
+    db: Session = Depends(get_db),
+    _: str = Depends(get_current_admin),
+):
+    post = (
+        db.query(Blog)
+        .filter(Blog.id == blog_id)
+        .first()
+    )
+
+    if not post:
+        raise HTTPException(404, "Blog post not found")
+
+    title = (title or "").strip()
+    content = (content or "").strip()
+
+    if not title:
+        raise HTTPException(400, "Blog title is required")
+    if not content:
+        raise HTTPException(400, "Blog content is required")
+
+    old_image = post.image_url
+    old_title = post.title
+
+    post.title = title
+
+    if title != old_title:
+        post.slug = _unique_blog_slug(db, title, exclude_id=post.id)
+
+    post.summary = (summary or "").strip() or None
+    post.content = content
+    post.category = (category or "").strip() or "General"
+    post.meta_description = (meta_description or "").strip() or None
+    post.source_url = (source_url or "").strip() or None
+
+    # ``published`` omitted -> leave the date alone unless the client cleared
+    # it. Sending an empty date is how the UI turns a post back into a draft.
+    if published is None:
+        if published_date is not None:
+            post.published_date = _parse_datetime_value(
+                published_date,
+                "published_date",
+            )
+    else:
+        post.published_date = _resolve_blog_publish(published, published_date)
+
+    if file and file.filename:
+        post.image_url = _upload_image(file, "blog")
+    elif remove_image:
+        post.image_url = None
+
+    db.commit()
+    db.refresh(post)
+
+    if old_image and old_image != post.image_url:
+        _delete_local_file(old_image)
+        _delete_cloudinary_file(old_image, "image")
+
+    return post
+
+
+@router.delete("/blog/{blog_id}")
+def delete_admin_blog_post(
+    blog_id: int,
+    db: Session = Depends(get_db),
+    _: str = Depends(get_current_admin),
+):
+    post = (
+        db.query(Blog)
+        .filter(Blog.id == blog_id)
+        .first()
+    )
+
+    if not post:
+        raise HTTPException(404, "Blog post not found")
+
+    old_image = post.image_url
+
+    db.delete(post)
+    db.commit()
+
+    _delete_local_file(old_image)
+    _delete_cloudinary_file(old_image, "image")
+
+    return {"message": "Blog post deleted"}

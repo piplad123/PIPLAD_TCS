@@ -3,13 +3,14 @@
 import html
 from datetime import datetime
 
+from .org_profile import ORG_DETAILS, ORG_NAME, ORG_TAGLINE
 
-ORG_NAME = "Piplad Welfare Foundation"
-ORG_TAGLINE = "Creating Opportunities, Creating Lives"
-ORG_DETAILS = (
-    "Registered under the Indian Trusts Act. Donations are eligible for "
-    "50% deduction under Section 80G of the Income Tax Act, 1961."
-)
+__all__ = [
+    "ORG_DETAILS",
+    "ORG_NAME",
+    "ORG_TAGLINE",
+    "build_donation_receipt_html",
+]
 
 
 def _format_amount(amount) -> str:

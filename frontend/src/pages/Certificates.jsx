@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Award } from 'lucide-react';
 import { cloudinaryUrl, fetchCertificates, resolveMediaUrl } from '../api';
+import CertificateLightbox from '../components/CertificateLightbox';
 
 import usePageMeta from '../hooks/usePageMeta';
 
@@ -12,6 +13,7 @@ export default function Certificates() {
   const [certificates, setCertificates] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [preview, setPreview] = useState(null);
 
   useEffect(() => {
     let mounted = true;
@@ -70,22 +72,23 @@ export default function Certificates() {
                   style={{ overflow: 'hidden', display: 'flex', flexDirection: 'column' }}
                 >
                   {certificate.image_url ? (
-                    <img
-                      loading="lazy"
-                      decoding="async"
-                      src={cloudinaryUrl(resolveMediaUrl(certificate.image_url), { width: 700 })}
-                      alt={certificate.title}
-                      style={{ width: '100%', height: 200, objectFit: 'cover' }}
-                    />
+                    <button
+                      type="button"
+                      className="cert-media"
+                      onClick={() => setPreview(certificate)}
+                      aria-label={`View ${certificate.title}`}
+                    >
+                      <img
+                        loading="lazy"
+                        decoding="async"
+                        src={cloudinaryUrl(resolveMediaUrl(certificate.image_url), { width: 700 })}
+                        alt={certificate.title}
+                        className="cert-thumb"
+                      />
+                    </button>
                   ) : (
                     <div
-                      style={{
-                        height: 200,
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        background: 'linear-gradient(135deg, #f0fdf4, #ecfccb)',
-                      }}
+                      className="cert-media cert-media-empty"
                     >
                       <Award size={48} color="#059669" />
                     </div>
@@ -105,6 +108,13 @@ export default function Certificates() {
           )}
         </div>
       </section>
+
+      {preview && (
+        <CertificateLightbox
+          certificate={preview}
+          onClose={() => setPreview(null)}
+        />
+      )}
     </div>
   );
 }

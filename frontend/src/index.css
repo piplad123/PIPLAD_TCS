@@ -1566,3 +1566,39 @@ a {
     padding: 1.1rem;
   }
 }
+
+/* Certificate media
+   Documents are letter/A4 shaped, so a fixed 200px height with object-fit:
+   cover chopped off the top and bottom of every scan. A 3:2 window with
+   object-fit: contain shows the whole document at a predictable size. */
+.cert-media {
+  display: block;
+  width: 100%;
+  aspect-ratio: 3 / 2;
+  padding: 0;
+  border: 0;
+  border-bottom: 1px solid #e2e8f0;
+  background: #f1f5f9;
+  cursor: zoom-in;
+  overflow: hidden;
+}
+
+.cert-media-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #f0fdf4, #ecfccb);
+  cursor: default;
+}
+
+.cert-thumb {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  background: #fff;
+  transition: transform 0.2s ease;
+}
+
+.cert-media:hover .cert-thumb {
+  transform: scale(1.02);
+}

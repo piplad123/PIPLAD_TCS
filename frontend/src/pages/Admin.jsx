@@ -41,10 +41,12 @@ import {
   ArrowDown,
   Save,
   Plus,
+  FileText,
 } from 'lucide-react';
 
 import {
   clearAdminCredentials,
+  createAdminBlogPost,
   createAdminCause,
   createAdminCertificate,
   createAdminFooterFocus,
@@ -53,6 +55,7 @@ import {
   createAdminMentor,
   createAdminProject,
   createAdminTeamMember,
+  deleteAdminBlogPost,
   deleteAdminCause,
   deleteAdminCertificate,
   deleteAdminFooterFocus,
@@ -66,6 +69,7 @@ import {
   deleteContactInquiry,
   fetchAdminCauses,
   fetchAdminCertificates,
+  fetchAdminBlogPosts,
   fetchAdminFounder,
   fetchAdminFooterFocus,
   fetchAdminFooterQuickLinks,
@@ -90,6 +94,7 @@ import {
   resolveMediaUrl,
   sendAdminTeamCard,
   setAdminCredentials,
+  updateAdminBlogPost,
   updateAdminCause,
   updateAdminCertificate,
   updateAdminFounder,
@@ -154,8 +159,58 @@ const emptyCauseForm = {
   shortDescription: '',
   fullDescription: '',
   targetAmount: '',
+  raisedAmount: '',
   file: null,
 };
+
+
+// Amounts arrive as strings, numbers or Decimal serialised values, so coerce
+// once before formatting or toLocaleString() throws on mixed input.
+function formatRupees(value) {
+  const n = Number(value);
+
+  if (!Number.isFinite(n)) {
+    return '0';
+  }
+
+  return n.toLocaleString('en-IN', {
+    maximumFractionDigits: 0,
+  });
+}
+
+
+const emptyBlogForm = {
+  title: '',
+  category: '',
+  summary: '',
+  content: '',
+  metaDescription: '',
+  sourceUrl: '',
+  published: true,
+  publishedDate: '',
+  file: null,
+};
+
+
+// ISO timestamp -> value accepted by <input type="datetime-local">.
+function toDatetimeLocal(value) {
+  if (!value) {
+    return '';
+  }
+
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return '';
+  }
+
+  const pad = (n) => String(n).padStart(2, '0');
+
+  return [
+    `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`,
+    `${pad(date.getHours())}:${pad(date.getMinutes())}`,
+  ].join('T');
+}
 
 
 // ============================================================
@@ -3387,6 +3442,10 @@ function CauseManager({ refreshAll }) {
         item.target_amount != null
           ? String(item.target_amount)
           : '',
+      raisedAmount:
+        item.raised_amount != null
+          ? String(item.raised_amount)
+          : '',
       file: null,
     });
 
@@ -3502,6 +3561,33 @@ function CauseManager({ refreshAll }) {
           }
           style={inputStyle}
         />
+
+        <input
+          type="number"
+          min="0"
+          step="0.01"
+          placeholder="Amount raised so far (₹)"
+          value={form.raisedAmount}
+          onChange={(e) =>
+            setForm({
+              ...form,
+              raisedAmount:
+                e.target.value,
+            })
+          }
+          style={inputStyle}
+        />
+
+        <small
+          style={{
+            color: '#64748b',
+            marginTop: '-0.75rem',
+            lineHeight: 1.5,
+          }}
+        >
+          Amount raised so far. Leave blank to keep the current running
+          total.
+        </small>
 
         <textarea
           placeholder="Short description (shown on cards)"
@@ -3664,9 +3750,9 @@ function CauseManager({ refreshAll }) {
                     color: '#475569',
                   }}
                 >
-                  ₹{(item.target_amount || 0).toLocaleString('en-IN')} goal
+                  ₹{formatRupees(item.target_amount)} goal
                   {' · '}
-                  ₹{(item.raised_amount || 0).toLocaleString('en-IN')} raised
+                  ₹{formatRupees(item.raised_amount)} raised
                 </p>
 
                 <div
@@ -4825,6 +4911,411 @@ const categoryLabels = {
   carbon: 'Verified Carbon Credits',
 };
 
+function BlogManager() {
+  const [items, setItems] = useState([]);
+  const [form, setForm] = useState(emptyBlogForm);
+  const [editingId, setEditingId] = useState(null);
+  const [removeImage, setRemoveImage] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
+  const [loading, setLoading] = useState(true);
+
+  async function load() {
+    setLoading(true);
+
+    try {
+      const data = await fetchAdminBlogPosts();
+      setItems(Array.isArray(data) ? data : []);
+      setError('');
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    load();
+  }, []);
+
+  function reset() {
+    setForm(emptyBlogForm);
+    setEditingId(null);
+    setRemoveImage(false);
+  }
+
+  function edit(item) {
+    setEditingId(item.id);
+    setRemoveImage(false);
+    setNotice('');
+    setForm({
+      title: item.title || '',
+      category: item.category || '',
+      summary: item.summary || '',
+      content: item.content || '',
+      metaDescription: item.meta_description || '',
+      sourceUrl: item.source_url || '',
+      published: Boolean(item.published_date),
+      publishedDate: toDatetimeLocal(item.published_date),
+      file: null,
+    });
+
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  async function submit(e) {
+    e.preventDefault();
+
+    setError('');
+    setNotice('');
+
+    if (!form.title.trim()) {
+      setError('Blog title is required.');
+      return;
+    }
+
+    if (!form.content.trim()) {
+      setError('Blog content is required.');
+      return;
+    }
+
+    setSaving(true);
+
+    try {
+      const payload = {
+        title: form.title.trim(),
+        content: form.content,
+        summary: form.summary,
+        category: form.category,
+        metaDescription: form.metaDescription,
+        sourceUrl: form.sourceUrl,
+        published: form.published,
+        publishedDate: form.published ? form.publishedDate : '',
+        file: form.file,
+      };
+
+      if (editingId) {
+        await updateAdminBlogPost(editingId, { ...payload, removeImage });
+        setNotice('Blog post updated.');
+      } else {
+        await createAdminBlogPost(payload);
+        setNotice(form.published ? 'Blog post published.' : 'Draft saved.');
+      }
+
+      reset();
+      await load();
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function remove(id) {
+    if (!window.confirm('Delete this blog post?')) {
+      return;
+    }
+
+    try {
+      await deleteAdminBlogPost(id);
+
+      if (editingId === id) {
+        reset();
+      }
+
+      await load();
+    } catch (e) {
+      setError(e.message);
+    }
+  }
+
+  return (
+    <ManagerSection
+      title="Blog Posts"
+      icon={<FileText size={22} />}
+    >
+      <p
+        style={{
+          margin: '0 0 1rem',
+          padding: '.75rem 1rem',
+          borderRadius: 8,
+          background: '#eff6ff',
+          color: '#1e3a8a',
+          lineHeight: 1.55,
+        }}
+      >
+        Create and edit posts here. Posts saved without a publish date are
+        drafts and stay hidden from the public blog. A separate raw database
+        view also exists in the admin panel at <code>/admin</code> under
+        &ldquo;blog&rdquo;.
+      </p>
+
+      <ErrorMessage message={error} />
+
+      {notice && (
+        <div
+          style={{
+            padding: '0.85rem 1rem',
+            marginBottom: '1rem',
+            borderRadius: 8,
+            background: '#dcfce7',
+            color: '#166534',
+          }}
+        >
+          {notice}
+        </div>
+      )}
+
+      <form onSubmit={submit} style={formGridStyle}>
+        <input
+          placeholder="Blog title"
+          value={form.title}
+          onChange={(e) => setForm({ ...form, title: e.target.value })}
+          required
+          style={inputStyle}
+        />
+
+        <input
+          placeholder="Category (e.g. Education)"
+          value={form.category}
+          onChange={(e) => setForm({ ...form, category: e.target.value })}
+          style={inputStyle}
+        />
+
+        <textarea
+          placeholder="Summary (shown on cards)"
+          value={form.summary}
+          onChange={(e) => setForm({ ...form, summary: e.target.value })}
+          style={textareaStyle}
+        />
+
+        <textarea
+          placeholder="Content"
+          value={form.content}
+          onChange={(e) => setForm({ ...form, content: e.target.value })}
+          required
+          style={{ ...textareaStyle, minHeight: 200 }}
+        />
+
+        <input
+          placeholder="Meta description (optional)"
+          value={form.metaDescription}
+          onChange={(e) =>
+            setForm({ ...form, metaDescription: e.target.value })
+          }
+          style={inputStyle}
+        />
+
+        <input
+          placeholder="Source URL (optional)"
+          value={form.sourceUrl}
+          onChange={(e) => setForm({ ...form, sourceUrl: e.target.value })}
+          style={inputStyle}
+        />
+
+        <input
+          type="file"
+          accept="image/jpeg,image/png,image/webp,image/gif"
+          onChange={(e) =>
+            setForm({
+              ...form,
+              file: e.target.files?.[0] || null,
+            })
+          }
+          style={inputStyle}
+        />
+
+        <label
+          style={{
+            display: 'flex',
+            gap: '.5rem',
+            alignItems: 'center',
+            fontWeight: 600,
+          }}
+        >
+          <input
+            type="checkbox"
+            checked={form.published}
+            onChange={(e) =>
+              setForm({
+                ...form,
+                published: e.target.checked,
+                publishedDate: e.target.checked
+                  ? form.publishedDate
+                  : '',
+              })
+            }
+          />
+          Publish this post
+        </label>
+
+        <div>
+          <label style={fieldLabelStyle}>Publish date (optional)</label>
+          <input
+            type="datetime-local"
+            value={form.publishedDate}
+            onChange={(e) =>
+              setForm({ ...form, publishedDate: e.target.value })
+            }
+            style={inputStyle}
+          />
+          <small
+            style={{
+              color: '#64748b',
+              display: 'block',
+              marginTop: '.4rem',
+              lineHeight: 1.5,
+            }}
+          >
+            Leave the date blank to publish immediately. Uncheck
+            &ldquo;Publish&rdquo; to keep the post as a hidden draft.
+          </small>
+        </div>
+
+        {editingId && (
+          <label
+            style={{
+              display: 'flex',
+              gap: '.5rem',
+              alignItems: 'center',
+            }}
+          >
+            <input
+              type="checkbox"
+              checked={removeImage}
+              onChange={(e) => setRemoveImage(e.target.checked)}
+            />
+            Remove current cover image
+          </label>
+        )}
+
+        <div
+          style={{
+            display: 'flex',
+            gap: '.75rem',
+            flexWrap: 'wrap',
+          }}
+        >
+          <button
+            className="btn"
+            disabled={saving}
+            style={primaryButton}
+          >
+            {saving
+              ? 'Saving...'
+              : editingId
+              ? 'Update Post'
+              : 'Add Post'}
+          </button>
+
+          {editingId && (
+            <button
+              type="button"
+              className="btn"
+              onClick={reset}
+            >
+              Cancel
+            </button>
+          )}
+        </div>
+      </form>
+
+      <div style={managerGrid}>
+        {loading ? (
+          <p>Loading...</p>
+        ) : items.length === 0 ? (
+          <p style={{ color: '#64748b' }}>No blog posts yet.</p>
+        ) : (
+          items.map((item) => (
+            <article
+              key={item.id}
+              className="card"
+              style={{ overflow: 'hidden' }}
+            >
+              {item.image_url && (
+                <img
+                  src={resolveMediaUrl(item.image_url)}
+                  alt={item.title}
+                  style={{
+                    width: '100%',
+                    height: 160,
+                    objectFit: 'cover',
+                  }}
+                />
+              )}
+
+              <div style={{ padding: '1rem' }}>
+                <div
+                  style={{
+                    display: 'flex',
+                    gap: '.4rem',
+                    flexWrap: 'wrap',
+                    alignItems: 'center',
+                  }}
+                >
+                  <span
+                    className={
+                      item.published_date
+                        ? 'badge badge-green'
+                        : 'badge'
+                    }
+                    style={
+                      item.published_date
+                        ? undefined
+                        : { background: '#e2e8f0', color: '#475569' }
+                    }
+                  >
+                    {item.published_date ? 'Published' : 'Draft'}
+                  </span>
+
+                  {item.category && (
+                    <span className="badge">{item.category}</span>
+                  )}
+                </div>
+
+                <h3 style={{ margin: '.5rem 0' }}>{item.title}</h3>
+
+                {item.summary && (
+                  <p style={{ color: '#64748b' }}>{item.summary}</p>
+                )}
+
+                {item.published_date && (
+                  <p style={{ color: '#475569', fontSize: '.85rem' }}>
+                    {new Date(item.published_date).toLocaleDateString(
+                      'en-IN',
+                      { day: 'numeric', month: 'short', year: 'numeric' }
+                    )}
+                  </p>
+                )}
+
+                <div style={{ display: 'flex', gap: '.5rem' }}>
+                  <button
+                    className="btn"
+                    onClick={() => edit(item)}
+                  >
+                    Edit
+                  </button>
+
+                  <button
+                    onClick={() => remove(item.id)}
+                    className="btn"
+                    style={dangerButton}
+                  >
+                    <Trash2 size={15} />
+                    Delete
+                  </button>
+                </div>
+              </div>
+            </article>
+          ))
+        )}
+      </div>
+    </ManagerSection>
+  );
+}
+
+
 function ImpactManager() {
   const [metrics, setMetrics] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -4864,6 +5355,7 @@ function ImpactManager() {
 
     try {
       const payload = metrics.map((metric) => ({
+        metric_key: metric.metric_key,
         value: Number(metric.value) || 0,
         is_published: Boolean(metric.is_published),
       }));
@@ -5212,6 +5704,11 @@ export default function Admin() {
       'causes',
       'Causes',
       HandHeart,
+    ],
+    [
+      'blog',
+      'Blog Posts',
+      FileText,
     ],
     [
       'team',
@@ -5580,6 +6077,10 @@ export default function Admin() {
                 loadDashboard
               }
             />
+          )}
+
+          {tab === 'blog' && (
+            <BlogManager />
           )}
 
           {tab === 'team' && (
@@ -7990,6 +8491,89 @@ const emptyHomeSlideForm = {
   file: null,
 };
 
+function SlideImagePreview({ item }) {
+  const [previewUrl, setPreviewUrl] = useState(null);
+
+  useEffect(() => {
+    if (!item.file) {
+      setPreviewUrl(null);
+      return undefined;
+    }
+
+    const url = URL.createObjectURL(item.file);
+    setPreviewUrl(url);
+
+    return () => URL.revokeObjectURL(url);
+  }, [item.file]);
+
+  // A newly chosen file REPLACES the stored image in the preview rather than
+  // sitting next to it, so it is never ambiguous which one will be saved.
+  const source = previewUrl || (item.image_url ? resolveMediaUrl(item.image_url) : null);
+
+  return (
+    <div style={{ position: 'relative' }}>
+      {source ? (
+        <img
+          src={source}
+          alt={item.title}
+          style={{
+            width: '100%',
+            height: '100%',
+            objectFit: 'cover',
+            minHeight: 200,
+            display: 'block',
+          }}
+        />
+      ) : (
+        <div
+          style={{
+            width: '100%',
+            height: '100%',
+            minHeight: 200,
+            display: 'grid',
+            placeItems: 'center',
+            background: '#e2e8f0',
+            color: '#64748b',
+          }}
+        >
+          No image
+        </div>
+      )}
+
+      {previewUrl && (
+        <span
+          className="badge badge-green"
+          style={{
+            position: 'absolute',
+            top: '10px',
+            left: '10px',
+            fontSize: '0.7rem',
+          }}
+        >
+          Unsaved — save to apply
+        </span>
+      )}
+
+      {item.removeImage && (
+        <span
+          className="badge"
+          style={{
+            position: 'absolute',
+            top: '10px',
+            left: '10px',
+            fontSize: '0.7rem',
+            background: '#dc2626',
+            color: '#fff',
+          }}
+        >
+          Will be removed on save
+        </span>
+      )}
+    </div>
+  );
+}
+
+
 function HomeHeroManager() {
   const [items, setItems] = useState([]);
   const [form, setForm] = useState(emptyHomeSlideForm);
@@ -8070,7 +8654,8 @@ function HomeHeroManager() {
       } else {
         const updated = await updateAdminHomeSlide(id, {
           ...fields,
-          imageUrl: item.image_url || null,
+          removeImage: Boolean(item.removeImage),
+          imageUrl: item.file || item.removeImage ? '' : item.image_url || '',
         });
 
         setItems((current) =>
@@ -8362,32 +8947,7 @@ function HomeHeroManager() {
                 }}
               >
                 <div>
-                  {item.image_url ? (
-                    <img
-                      src={resolveMediaUrl(item.image_url)}
-                      alt={item.title}
-                      style={{
-                        width: '100%',
-                        height: '100%',
-                        objectFit: 'cover',
-                        minHeight: 200,
-                      }}
-                    />
-                  ) : (
-                    <div
-                      style={{
-                        width: '100%',
-                        height: '100%',
-                        minHeight: 200,
-                        display: 'grid',
-                        placeItems: 'center',
-                        background: '#e2e8f0',
-                        color: '#64748b',
-                      }}
-                    >
-                      No image
-                    </div>
-                  )}
+                  <SlideImagePreview item={item} />
                 </div>
 
                 <div
@@ -8454,10 +9014,36 @@ function HomeHeroManager() {
                     type="file"
                     accept="image/jpeg,image/png,image/webp,image/gif"
                     onChange={(e) =>
-                      patchItem(item.id, { file: e.target.files?.[0] || null })
+                      patchItem(item.id, {
+                        file: e.target.files?.[0] || null,
+                        removeImage: false,
+                      })
                     }
                     style={inputStyle}
                   />
+
+                  {item.image_url && (
+                    <label
+                      style={{
+                        display: 'flex',
+                        gap: '.5rem',
+                        alignItems: 'center',
+                        fontWeight: 600,
+                      }}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={Boolean(item.removeImage)}
+                        onChange={(e) =>
+                          patchItem(item.id, {
+                            removeImage: e.target.checked,
+                            file: null,
+                          })
+                        }
+                      />
+                      Remove current image
+                    </label>
+                  )}
 
                   <div
                     style={{

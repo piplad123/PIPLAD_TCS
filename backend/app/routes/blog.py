@@ -21,11 +21,12 @@ def get_blog_posts(
     db: Session = Depends(get_db),
 ):
     """
-    Return all blog posts ordered by publication date.
+    Return all published blog posts ordered by publication date.
     Optional ``category`` and free-text ``q`` (title/summary) filters.
+    Posts without a ``published_date`` are drafts and stay hidden.
     """
 
-    query = db.query(Blog)
+    query = db.query(Blog).filter(Blog.published_date.isnot(None))
 
     if category:
         query = query.filter(Blog.category == category)
@@ -45,12 +46,13 @@ def get_blog_post(
     db: Session = Depends(get_db)
 ):
     """
-    Return a single blog post by ID.
+    Return a single published blog post by ID.
+    Drafts (no ``published_date``) are treated as not found.
     """
 
     post = (
         db.query(Blog)
-        .filter(Blog.id == blog_id)
+        .filter(Blog.id == blog_id, Blog.published_date.isnot(None))
         .first()
     )
 

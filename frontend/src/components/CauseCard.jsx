@@ -2,10 +2,24 @@
 import { Heart } from 'lucide-react';
 import { cloudinaryUrl } from '../api';
 
+function formatRupees(value) {
+  const n = Number(value);
+
+  if (!Number.isFinite(n)) {
+    return '0';
+  }
+
+  return n.toLocaleString('en-IN', {
+    maximumFractionDigits: 0,
+  });
+}
+
 export default function CauseCard({ cause, onDonate }) {
+  const raised = Number(cause.raised_amount || 0);
+  const target = Number(cause.target_amount || 0);
   const percentage = Math.min(
     100,
-    Math.round(((cause.raised_amount || 0) / (cause.target_amount || 1)) * 100)
+    Math.round((raised / (target || 1)) * 100)
   );
 
   return (
@@ -40,10 +54,10 @@ export default function CauseCard({ cause, onDonate }) {
         <div style={{ marginBottom: '1.25rem' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', fontWeight: 600, marginBottom: '0.4rem' }}>
             <span style={{ color: '#059669' }}>
-              ₹{(cause.raised_amount || 0).toLocaleString('en-IN')} Raised
+              ₹{formatRupees(raised)} Raised
             </span>
             <span style={{ color: '#64748b' }}>
-              Goal: ₹{(cause.target_amount || 0).toLocaleString('en-IN')}
+              Goal: ₹{formatRupees(target)}
             </span>
           </div>
           <div className="progress-bar-bg">

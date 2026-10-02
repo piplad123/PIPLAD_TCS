@@ -4,6 +4,7 @@ import hashlib
 import json
 import logging
 from datetime import datetime
+from decimal import Decimal
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
@@ -204,7 +205,12 @@ def _finalize_donation(
     if was_pending and donation.cause_id:
         cause = db.query(Cause).filter(Cause.id == donation.cause_id).first()
         if cause:
-            cause.raised_amount = (cause.raised_amount or 0.0) + donation.amount
+            # Coerce both sides to Decimal. Numeric columns come back as Decimal
+            # on PostgreSQL but as float on SQLite, and a float on the left of
+            # this addition would raise TypeError and fail the whole webhook.
+            current = Decimal(str(cause.raised_amount or 0))
+            amount = Decimal(str(donation.amount or 0))
+            cause.raised_amount = current + amount
 
     if was_pending:
         send_admin_alert_email(

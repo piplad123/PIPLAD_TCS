@@ -1418,6 +1418,17 @@ CARD_T = CARD_BLEED                      # trim top
 CARD_R = CARD_W - CARD_BLEED             # trim right
 CARD_B = CARD_H - CARD_BLEED             # trim bottom
 
+# ============================================================
+# ID card 60/40 split
+# ============================================================
+# CR80 is landscape, so the 60/40 split runs vertically: the identity block
+# (photo + name) takes the left ~60% of the trim and the data panel + QR take
+# the right ~40%. Both faces share the split so the two sides read as one card.
+CARD_BAND_H = 118           # institutional header band
+CARD_BAND_FADE = 20
+CARD_SPLIT_X = CARD_L + round((CARD_R - CARD_L) * 0.60)  # identity / data divide
+CARD_GUTTER = 20
+
 
 def _center_square(img: Image.Image) -> Image.Image:
     """Crop the centred square used for the round ID photo (no distortion)."""
@@ -1442,8 +1453,8 @@ def _card_top_band(img: Image.Image, palette: dict, logo_bytes: bytes | None, su
     ivory field) carrying the emblem, brand and card-type subtitle."""
     c1, c2 = _hex(GREEN_950), _hex(GREEN_800)
     ivory = (252, 253, 251)
-    solid = CARD_T + 132
-    fade = 24
+    solid = CARD_T + CARD_BAND_H
+    fade = CARD_BAND_FADE
     band = _draw(img)
     for y in range(solid + fade):
         if y < solid:
@@ -1460,14 +1471,14 @@ def _card_top_band(img: Image.Image, palette: dict, logo_bytes: bytes | None, su
         try:
             # Opened lazily; _paste_emblem shrinks it before decoding.
             logo = Image.open(io.BytesIO(logo_bytes))
-            _paste_emblem(img, logo, CARD_L + 54, CARD_T + 72, 50, GOLD_BRIGHT)
+            _paste_emblem(img, logo, CARD_L + 50, CARD_T + 62, 44, GOLD_BRIGHT)
         except Exception:  # noqa: BLE001 - logo must never break rendering
             pass
 
     dr = _draw(img)
-    _draw_tracked(dr, CARD_L + 96, CARD_T + 56, "PIPLAD WELFARE FOUNDATION", sans(20, 700), (255, 255, 255), tracking=5, anchor="ls")
+    _draw_tracked(dr, CARD_L + 88, CARD_T + 50, "PIPLAD WELFARE FOUNDATION", sans(19, 700), (255, 255, 255), tracking=5, anchor="ls")
     if subtitle:
-        _draw_tracked(dr, CARD_L + 97, CARD_T + 94, subtitle, sans(11, 700), _hex("#DDEBE6"), tracking=4, anchor="ls")
+        _draw_tracked(dr, CARD_L + 89, CARD_T + 86, subtitle, sans(10, 700), _hex("#DDEBE6"), tracking=4, anchor="ls")
 
 
 def _id_qr_zone(img: Image.Image, palette: dict, right: float, top: float, bottom: float, qr_data: str, label: str, max_w: float = 290):
@@ -1537,6 +1548,67 @@ def _paste_card_photo(img: Image.Image, photo, center, diameter: int, initials: 
     img.paste(canvas, (int(center[0] - (d + pad) / 2), int(center[1] - (d + pad) / 2)), canvas)
 
 
+def _fit_lines(dr, text: str, font, max_width: float, max_lines: int, min_size: int):
+    """Shrink ``font`` until ``text`` fits ``max_lines`` within ``max_width``.
+
+    Long volunteer names wrap to two lines at the largest size that still fits
+    instead of collapsing to one thin, unreadable line.
+    """
+    size = font.size
+    while True:
+        candidate = serif(size, 800)
+        lines = _wrap_text(dr, text, candidate, max_width)
+        too_wide = any(dr.textlength(ln, font=candidate) > max_width for ln in lines)
+        if (not too_wide and len(lines) <= max_lines) or size <= min_size:
+            return candidate, lines[:max_lines]
+        size -= 2
+
+
+def _card_identity_block(img: Image.Image, full_name: str, designation: str, photo, panel_x0: float, panel_x1: float):
+    """The dominant identity zone: large photo, big serif name, role line.
+
+    Shared by both faces so the front and back identify the volunteer the same.
+    """
+    dr = _draw(img)
+    green_ink = _hex(GREEN_950)
+    muted = _hex(MUTED)
+    panel_w = panel_x1 - panel_x0
+    center_x = (panel_x0 + panel_x1) / 2
+
+    # --- Photo ------------------------------------------------------------
+    initials = "".join(w[0] for w in full_name.split()[:2])
+    diameter = 268
+    photo_cy = CARD_T + CARD_BAND_H + CARD_BAND_FADE + 34 + diameter / 2
+    _paste_card_photo(img, photo, (center_x, photo_cy), diameter, initials)
+
+    # --- Name + role ------------------------------------------------------
+    top = photo_cy + diameter / 2 + 30
+    max_w = panel_w - 40
+    name_font, name_lines = _fit_lines(dr, full_name or "Volunteer", serif(44, 800), max_w, 2, 24)
+    line_h = int(name_font.size * 1.16)
+    y = top
+    for line in name_lines:
+        dr.text((center_x, y), line, font=name_font, fill=green_ink, anchor="ma")
+        y += line_h
+
+    # Accent rule under the name.
+    rule_y = y + 8
+    rule_w = min(150, int(name_font.size * 3.0))
+    gold = _hex(GOLD)
+    dr.line([center_x - rule_w, rule_y, center_x - 16, rule_y], fill=gold, width=3)
+    dr.line([center_x + 16, rule_y, center_x + rule_w, rule_y], fill=gold, width=3)
+    dr.polygon(
+        [(center_x - 7, rule_y), (center_x, rule_y - 7), (center_x + 7, rule_y), (center_x, rule_y + 7)],
+        fill=gold,
+    )
+
+    if designation:
+        deg_font = serif_italic(20)
+        if dr.textlength(designation, font=deg_font) > max_w:
+            deg_font = serif_italic(int(20 * max_w / max(dr.textlength(designation, font=deg_font), 1)))
+        dr.text((center_x, rule_y + 34), designation, font=deg_font, fill=muted, anchor="ma")
+
+
 @_locked_render
 def render_volunteer_card_front(
     *,
@@ -1573,37 +1645,44 @@ def render_volunteer_card_front(
     green_ink = _hex(GREEN_950)
     muted = _hex(MUTED)
 
-    # --- Photo ------------------------------------------------------------
-    initials = "".join(w[0] for w in full_name.split()[:2])
-    _paste_card_photo(img, photo, (CARD_L + 150, CARD_T + 225), 130, initials)
+    # --- Identity zone (left 60%) ------------------------------------------
+    _card_identity_block(img, full_name, designation, photo, CARD_L, CARD_SPLIT_X - CARD_GUTTER)
 
-    # --- Identity block ----------------------------------------------------
-    x = CARD_L + 250
-    _draw_tracked(dr, x, CARD_T + 200, "VOLUNTEER", sans(13, 700), _hex(GOLD), tracking=6, anchor="ls")
-    name_font = serif(46, 800)
-    if dr.textlength(full_name, font=name_font) > 445:
-        name_font = serif(int(46 * 445 / dr.textlength(full_name, font=name_font)), 800)
-    dr.text((x, CARD_T + 252), full_name, font=name_font, fill=green_ink, anchor="ls")
-    deg_font = serif_italic(21)
-    if dr.textlength(designation, font=deg_font) > 420:
-        deg_font = serif_italic(int(21 * 420 / dr.textlength(designation, font=deg_font)))
-    dr.text((x, CARD_T + 300), designation, font=deg_font, fill=muted, anchor="ls")
+    # --- Data zone (right 40%) ---------------------------------------------
+    panel_x0 = CARD_SPLIT_X
+    panel_x1 = CARD_R
+    dr.rounded_rectangle(
+        [panel_x0, CARD_T + CARD_BAND_H + CARD_BAND_FADE, panel_x1, CARD_B - 26],
+        radius=16,
+        fill=_hex("#EFF4EF"),
+    )
 
-    # --- Header fields ------------------------------------------------------
-    fx = CARD_L + 102
-    label_font = sans(12, 700)
-    value_font = sans(20, 700)
-    _draw_tracked(dr, fx, CARD_T + 400, "VOLUNTEER ID", label_font, muted, tracking=3, anchor="ls")
-    dr.text((fx, CARD_T + 432), vol_id, font=value_font, fill=green_ink, anchor="ls")
-    _draw_tracked(dr, fx, CARD_T + 490, "JOINING DATE", label_font, muted, tracking=3, anchor="ls")
-    dr.text((fx, CARD_T + 522), joining_date or "", font=value_font, fill=green_ink, anchor="ls")
+    fx = panel_x0 + 22
+    label_font = sans(11, 700)
+    value_font = sans(19, 700)
+    value_w = panel_x1 - fx - 22
+    y = CARD_T + CARD_BAND_H + CARD_BAND_FADE + 26
+    for label, value in (
+        ("VOLUNTEER ID", vol_id),
+        ("JOINING DATE", joining_date),
+        ("CONTACT", phone.strip() or email.strip()),
+    ):
+        _draw_tracked(dr, fx, y, label, label_font, muted, tracking=3, anchor="ls")
+        vfont = value_font
+        if dr.textlength(value or " ", font=vfont) > value_w:
+            vfont = sans(int(19 * value_w / max(dr.textlength(value, font=vfont), 1)), 700)
+        dr.text((fx, y + 28), value, font=vfont, fill=green_ink, anchor="ls")
+        y += 62
 
-    # --- Verification column (flush, bottom right) ----------------------------
-    _id_qr_zone(img, palette, CARD_R - 22, CARD_T + 352, CARD_B - 42, qr_data, "SCAN TO VERIFY", max_w=288)
+    # --- Verification code (bottom of the data zone) ------------------------
+    _id_qr_zone(
+        img, palette, panel_x1 - 22, CARD_B - 250, CARD_B - 34, qr_data,
+        "SCAN TO VERIFY", max_w=panel_x1 - panel_x0 - 40,
+    )
 
     # --- Tagline ---------------------------------------------------------------
     _draw_tracked(
-        dr, CARD_CX, CARD_B - 16, "Transforming Lives Through Compassion & Service",
+        dr, CARD_CX, CARD_B - 10, "Transforming Lives Through Compassion & Service",
         sans(10, 600), muted, tracking=2,
     )
     _card_trim_marks(img, (196, 202, 198))
@@ -1645,43 +1724,51 @@ def render_volunteer_card_back(
     green_ink = _hex(GREEN_950)
     muted = _hex(MUTED)
 
-    # --- Soft data panel -----------------------------------------------------
-    px0, py0 = CARD_L + 40, CARD_T + 210
-    px1, py1 = CARD_R - 300, CARD_B - 52
-    dr.rounded_rectangle([px0, py0, px1, py1], radius=18, fill=_hex("#EFF4EF"))
+    # --- Identity zone (left 60%) ------------------------------------------
+    _card_identity_block(img, full_name, designation, photo, CARD_L, CARD_SPLIT_X - CARD_GUTTER)
 
-    label_font = sans(11, 700)
-    value_font = sans(20, 700)
+    # --- Data panel (right 40%) ---------------------------------------------
+    panel_x0 = CARD_SPLIT_X
+    panel_x1 = CARD_R
+    dr.rounded_rectangle(
+        [panel_x0, CARD_T + CARD_BAND_H + CARD_BAND_FADE, panel_x1, CARD_B - 26],
+        radius=16,
+        fill=_hex("#EFF4EF"),
+    )
+
+    label_font = sans(10, 700)
+    value_font = sans(16, 700)
+    x = panel_x0 + 22
+    value_w = panel_x1 - x - 22
+    y = CARD_T + CARD_BAND_H + CARD_BAND_FADE + 20
     rows = [
-        ("NAME", full_name),
         ("VOLUNTEER ID", vol_id),
         ("EMAIL", email.strip()),
-        ("CONTACT", phone.strip()),
         ("JOINING DATE", joining_date.strip()),
-        ("STATUS", status_text),
     ]
-    x = CARD_L + 70
-    y = CARD_T + 217
     for label, value in rows:
         _draw_tracked(dr, x, y, label, label_font, muted, tracking=3, anchor="ls")
         vfont = value_font
-        if dr.textlength(value or " ", font=vfont) > 610:
-            vfont = sans(int(20 * 610 / max(dr.textlength(value, font=vfont), 1)), 700)
-        status_ok = label == "STATUS" and status_text.lower() in ("active", "issued", "accepted")
-        if label == "STATUS":
-            dot_col = _hex(GREEN_800 if status_ok else AMBER)
-            dr.ellipse([x, y + 24, x + 10, y + 34], fill=dot_col)
-            dr.text((x + 22, y + 34), value, font=vfont, fill=dot_col, anchor="ls")
-        else:
-            dr.text((x, y + 30), value, font=vfont, fill=green_ink, anchor="ls")
-        y += 62
+        if dr.textlength(value or " ", font=vfont) > value_w:
+            vfont = sans(int(16 * value_w / max(dr.textlength(value, font=vfont), 1)), 700)
+        dr.text((x, y + 26), value, font=vfont, fill=green_ink, anchor="ls")
+        y += 52
 
-    # --- Verification column (flush, right) ----------------------------------
-    _id_qr_zone(img, palette, CARD_R - 22, CARD_T + 170, CARD_B - 42, qr_data, "VERIFICATION", max_w=258)
+    status_ok = status_text.lower() in ("active", "issued", "accepted")
+    _draw_tracked(dr, x, y, "STATUS", label_font, muted, tracking=3, anchor="ls")
+    dot_col = _hex(GREEN_800 if status_ok else AMBER)
+    dr.ellipse([x, y + 18, x + 9, y + 27], fill=dot_col)
+    dr.text((x + 18, y + 27), status_text, font=sans(16, 700), fill=dot_col, anchor="ls")
+
+    # --- Verification code (bottom of the data panel) ----------------------
+    _id_qr_zone(
+        img, palette, panel_x1 - 22, CARD_B - 236, CARD_B - 34, qr_data,
+        "VERIFICATION", max_w=panel_x1 - panel_x0 - 40,
+    )
 
     # --- Tagline ---------------------------------------------------------------
     _draw_tracked(
-        dr, CARD_CX, CARD_B - 16, "Transforming Lives Through Compassion & Service",
+        dr, CARD_CX, CARD_B - 10, "Transforming Lives Through Compassion & Service",
         sans(10, 600), muted, tracking=2,
     )
     _card_trim_marks(img, (196, 202, 198))

@@ -4,9 +4,9 @@ import logging
 import mimetypes
 from pathlib import Path
 
-logger = logging.getLogger(__name__)
+from .org_profile import ORG_NAME
 
-ORG_NAME = "Piplad Welfare Foundation"
+logger = logging.getLogger(__name__)
 
 PROFILE_IMAGE_MIME = "image/jpeg"
 MAX_EMAIL_PHOTO_BYTES = 2 * 1024 * 1024

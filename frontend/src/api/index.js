@@ -299,7 +299,9 @@ export async function updateAdminHomeSlide(id, form) {
   if (form.text !== undefined) data.append('text', form.text || '');
   if (form.display_order !== undefined) data.append('display_order', String(form.display_order));
   if (form.is_active !== undefined) data.append('is_active', form.is_active ? 'true' : 'false');
+  if (form.removeImage !== undefined) data.append('remove_image', form.removeImage ? 'true' : 'false');
   if (form.file) data.append('image', form.file);
+  else if (form.removeImage) data.append('image_url', '');
   else if (form.imageUrl !== undefined && form.imageUrl !== null) data.append('image_url', form.imageUrl || '');
 
   return adminFetch(`/admin/home/slides/${id}`, {
@@ -534,6 +536,7 @@ export async function createAdminCause({
   shortDescription,
   fullDescription,
   targetAmount,
+  raisedAmount,
   file,
 }) {
   const form = new FormData();
@@ -551,6 +554,10 @@ export async function createAdminCause({
 
   if (targetAmount) {
     form.append('target_amount', String(targetAmount));
+  }
+
+  if (raisedAmount !== undefined && raisedAmount !== null && raisedAmount !== '') {
+    form.append('raised_amount', String(raisedAmount));
   }
 
   if (file) {
@@ -571,6 +578,7 @@ export async function updateAdminCause(
     shortDescription,
     fullDescription,
     targetAmount,
+    raisedAmount,
     file,
     removeImage,
   }
@@ -590,6 +598,12 @@ export async function updateAdminCause(
 
   if (targetAmount) {
     form.append('target_amount', String(targetAmount));
+  }
+
+  // Omitted entirely when blank so the backend keeps the donation-driven
+  // running total instead of resetting it to zero.
+  if (raisedAmount !== undefined && raisedAmount !== null && raisedAmount !== '') {
+    form.append('raised_amount', String(raisedAmount));
   }
 
   form.append('remove_image', String(Boolean(removeImage)));
@@ -995,6 +1009,78 @@ export async function fetchBlogPost(id) {
   }
 
   return res.json();
+}
+
+// ============================================================
+// ADMIN BLOG
+// ============================================================
+
+export async function fetchAdminBlogPosts() {
+  return adminFetch('/admin/blog');
+}
+
+export async function createAdminBlogPost({
+  title,
+  content,
+  summary,
+  category,
+  metaDescription,
+  sourceUrl,
+  published,
+  publishedDate,
+  file,
+}) {
+  const form = new FormData();
+  form.append('title', title || '');
+  form.append('content', content || '');
+  form.append('summary', summary || '');
+  form.append('category', category || '');
+  form.append('meta_description', metaDescription || '');
+  form.append('source_url', sourceUrl || '');
+  form.append('published', published ? 'true' : 'false');
+  if (publishedDate) form.append('published_date', publishedDate);
+  if (file) form.append('file', file);
+
+  return adminFetch('/admin/blog', {
+    method: 'POST',
+    body: form,
+  });
+}
+
+export async function updateAdminBlogPost(id, {
+  title,
+  content,
+  summary,
+  category,
+  metaDescription,
+  sourceUrl,
+  published,
+  publishedDate,
+  removeImage,
+  file,
+}) {
+  const form = new FormData();
+  form.append('title', title || '');
+  form.append('content', content || '');
+  form.append('summary', summary || '');
+  form.append('category', category || '');
+  form.append('meta_description', metaDescription || '');
+  form.append('source_url', sourceUrl || '');
+  form.append('published', published ? 'true' : 'false');
+  form.append('published_date', publishedDate || '');
+  form.append('remove_image', removeImage ? 'true' : 'false');
+  if (file) form.append('file', file);
+
+  return adminFetch(`/admin/blog/${id}`, {
+    method: 'PUT',
+    body: form,
+  });
+}
+
+export async function deleteAdminBlogPost(id) {
+  return adminFetch(`/admin/blog/${id}`, {
+    method: 'DELETE',
+  });
 }
 
 // ============================================================

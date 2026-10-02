@@ -29,6 +29,7 @@ import {
   resolveMediaUrl,
 } from '../api';
 import CauseCard from '../components/CauseCard';
+import CertificateLightbox from '../components/CertificateLightbox';
 import { impactAreasData, whoWeAreData } from '../data/aboutdata';
 import { partnerData } from '../data/partnerData';
 import { defaultHeroSlides as heroSlides } from '../data/heroSlides';
@@ -83,16 +84,39 @@ export default function Home({ onOpenDonate, onSelectCauseToDonate }) {
   const [projects, setProjects] = useState([]);
   const [certificates, setCertificates] = useState([]);
   const [impact, setImpact] = useState(null);
+  const [certPreview, setCertPreview] = useState(null);
   const [loading, setLoading] = useState({ slides: true, causes: true, blogs: true, projects: true, certificates: true, impact: true });
 
-  const activeSlides = slides.length > 0 ? slides : heroSlides;
+  // Saved slides and the built-in defaults are merged, not swapped. Treating
+  // them as either/or meant that saving a single slide silently dropped the
+  // other four from the carousel.
+  const activeSlides = useMemo(() => {
+    const savedTitles = new Set(
+      slides.map((s) => (s.title || '').trim())
+    );
+
+    const remainingDefaults = heroSlides
+      .filter((def) => !savedTitles.has((def.title || '').trim()))
+      .map((def) => ({ ...def, image: def.image }));
+
+    return [...slides, ...remainingDefaults];
+  }, [slides]);
+
+  // Avoid a % 0 in the autoplay timer before anything has loaded.
+  const activeSlideCount = activeSlides.length || 1;
 
   useEffect(() => {
     const timer = window.setInterval(() => {
-      setSlide((current) => (current + 1) % activeSlides.length);
+      setSlide((current) => (current + 1) % activeSlideCount);
     }, 6000);
     return () => window.clearInterval(timer);
-  }, [activeSlides.length]);
+  }, [activeSlideCount]);
+
+  useEffect(() => {
+    if (slide >= activeSlideCount) {
+      setSlide(0);
+    }
+  }, [activeSlideCount, slide]);
 
   useEffect(() => {
     let mounted = true;
@@ -487,7 +511,20 @@ export default function Home({ onOpenDonate, onSelectCauseToDonate }) {
               {featuredCertificates.map((certificate) => (
                 <article className="home-certificate-card" key={certificate.id}>
                   {certificate.image_url ? (
-                    <img loading="lazy" decoding="async" src={cloudinaryUrl(resolveMediaUrl(certificate.image_url), { width: 700 })} alt={certificate.title} />
+                    <button
+                      type="button"
+                      className="cert-media"
+                      onClick={() => setCertPreview(certificate)}
+                      aria-label={`View ${certificate.title}`}
+                    >
+                      <img
+                        loading="lazy"
+                        decoding="async"
+                        className="cert-thumb"
+                        src={cloudinaryUrl(resolveMediaUrl(certificate.image_url), { width: 700 })}
+                        alt={certificate.title}
+                      />
+                    </button>
                   ) : (
                     <div className="home-certificate-placeholder"><Award size={38} /></div>
                   )}
@@ -540,6 +577,13 @@ export default function Home({ onOpenDonate, onSelectCauseToDonate }) {
           <button className="btn btn-primary" onClick={() => onOpenDonate()}><Utensils size={18} /> Donate Now</button>
         </div>
       </section>
+
+      {certPreview && (
+        <CertificateLightbox
+          certificate={certPreview}
+          onClose={() => setCertPreview(null)}
+        />
+      )}
     </main>
   );
 }

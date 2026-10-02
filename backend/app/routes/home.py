@@ -144,6 +144,7 @@ def update_home_slide(
     text: Optional[str] = Form(None),
     display_order: Optional[int] = Form(None),
     is_active: Optional[str] = Form(None),
+    remove_image: bool = Form(False),
     image: Optional[UploadFile] = File(None),
     image_url: Optional[str] = Form(None),
     db: Session = Depends(get_db),
@@ -179,23 +180,52 @@ def update_home_slide(
     if is_active is not None:
         slide.is_active = _parse_bool(is_active, "is_active")
 
-    if image is not None and image.filename:
-        old_url = slide.image_url
-        slide.image_url = _upload_image(image, "home")
-        if old_url and old_url != slide.image_url:
-            _delete_local_file(old_url)
-            _delete_cloudinary_file(old_url, "image")
+    # Image replacement is explicit and unambiguous:
+    #   1. a new upload wins
+    #   2. remove_image clears it
+    #   3. image_url is only applied when the client actually sent a usable
+    #      value, so echoing back the stored URL can never blank the row.
+    old_url = slide.image_url
+    has_upload = image is not None and bool(image.filename)
+    desired_url = None
+    apply_image = False
+
+    if has_upload:
+        desired_url = _upload_image(image, "home")
+        apply_image = True
+    elif remove_image:
+        desired_url = None
+        apply_image = True
     elif image_url is not None:
-        resolved_url = _clean_image_url(image_url)
-        if resolved_url != slide.image_url:
-            old_url = slide.image_url
-            slide.image_url = resolved_url
-            if old_url and resolved_url:
-                _delete_local_file(old_url)
-                _delete_cloudinary_file(old_url, "image")
+        sent = image_url.strip()
+        resolved = _clean_image_url(sent)
+
+        if resolved:
+            # Only touch the row when this actually differs, so echoing the
+            # stored URL back is a no-op rather than a delete-and-recreate.
+            apply_image = resolved != old_url
+            desired_url = resolved
+        elif not sent:
+            # Explicitly sent empty -> clear the image.
+            desired_url = None
+            apply_image = True
+
+    replacement = None
+
+    if apply_image:
+        slide.image_url = desired_url
+
+        if old_url and old_url != desired_url:
+            replacement = old_url
 
     db.commit()
     db.refresh(slide)
+
+    # Only drop the previous asset once the row has safely moved on to the new
+    # one, so a failed commit cannot leave the slide pointing at a deleted file.
+    if replacement:
+        _delete_local_file(replacement)
+        _delete_cloudinary_file(replacement, "image")
 
     return slide
 
@@ -239,13 +269,28 @@ def reorder_home_slides(
         for slide in db.query(HomeSlide).all()
     }
 
-    for index, slide_id in enumerate(ordered_ids):
-        slide = existing.get(slide_id)
+    # Normalise the payload: supplied ids keep their order, any id the client
+    # omitted keeps its existing relative order after them, and unknown ids are
+    # ignored. Every slide is then re-indexed from 0 so display_order can never
+    # end up duplicated or sparse.
+    sequence = [
+        slide_id
+        for slide_id in ordered_ids
+        if slide_id in existing
+    ]
 
-        if slide is None:
-            continue
+    seen = set(sequence)
+    sequence.extend(
+        slide_id
+        for slide_id in sorted(
+            existing,
+            key=lambda i: (existing[i].display_order, i),
+        )
+        if slide_id not in seen
+    )
 
-        slide.display_order = index
+    for index, slide_id in enumerate(sequence):
+        existing[slide_id].display_order = index
 
     db.commit()
 
