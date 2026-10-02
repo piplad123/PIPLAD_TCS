@@ -8762,14 +8762,6 @@ function HomeHeroManager() {
     }
   }
 
-  const fieldLabelStyle = {
-    fontWeight: 600,
-    display: 'block',
-    marginBottom: '.35rem',
-    fontSize: '.85rem',
-    color: '#334155',
-  };
-
   return (
     <ManagerSection
       title="Home Page Hero Slides"
@@ -9147,6 +9139,14 @@ const formGridStyle = {
   display: 'grid',
   gap: '.9rem',
   marginBottom: '2rem',
+};
+
+const fieldLabelStyle = {
+  fontWeight: 600,
+  display: 'block',
+  marginBottom: '.35rem',
+  fontSize: '.85rem',
+  color: '#334155',
 };
 
 const managerGrid = {
