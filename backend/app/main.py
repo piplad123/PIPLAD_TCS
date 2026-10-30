@@ -135,6 +135,22 @@ with engine.begin() as connection:
                 )
             )
 
+    if "home_slides" in existing_tables:
+        columns = {
+            column["name"]
+            for column in inspector.get_columns("home_slides")
+        }
+
+        if "default_key" not in columns:
+            connection.execute(
+                text(
+                    """
+                    ALTER TABLE home_slides
+                    ADD COLUMN default_key VARCHAR(100)
+                    """
+                )
+            )
+
     if "volunteer_applications" in existing_tables:
         columns = {
             column["name"]

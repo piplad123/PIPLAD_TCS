@@ -239,6 +239,20 @@ async function adminFetch(path, options = {}) {
   return response.json();
 }
 
+export async function changeAdminPassword({
+  currentPassword,
+  newPassword,
+}) {
+  return adminFetch('/admin/credentials/password', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      current_password: currentPassword,
+      new_password: newPassword,
+    }),
+  });
+}
+
 
 // ============================================================
 // ADMIN DASHBOARD
@@ -277,6 +291,7 @@ export async function fetchAdminHomeSlides() {
 export async function createAdminHomeSlide(form) {
   const data = new FormData();
   data.append('title', form.title || '');
+  if (form.defaultKey) data.append('default_key', form.defaultKey);
   if (form.eyebrow) data.append('eyebrow', form.eyebrow);
   if (form.highlight) data.append('highlight', form.highlight);
   if (form.text) data.append('text', form.text);
@@ -294,6 +309,7 @@ export async function createAdminHomeSlide(form) {
 export async function updateAdminHomeSlide(id, form) {
   const data = new FormData();
   if (form.title !== undefined) data.append('title', form.title || '');
+  if (form.defaultKey !== undefined) data.append('default_key', form.defaultKey || '');
   if (form.eyebrow !== undefined) data.append('eyebrow', form.eyebrow || '');
   if (form.highlight !== undefined) data.append('highlight', form.highlight || '');
   if (form.text !== undefined) data.append('text', form.text || '');

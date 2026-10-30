@@ -255,17 +255,25 @@ def build_team_card_jpg(
 
     # Header band
     draw.rectangle((0, 0, CARD_W, HEADER_H), fill=SLATE)
-    badge_w, badge_h = 232, 28
-    badge_box = ((CARD_W - badge_w) // 2, 26, (CARD_W + badge_w) // 2, 26 + badge_h)
-    draw.rounded_rectangle(badge_box, radius=14, fill=LIME_BADGE)
-    badge_font = _load_pair(11)[0]
     badge_text = "PIPLAD WELFARE FOUNDATION"
+    badge_font = _load_pair(16)[0]
     bbox = draw.textbbox((0, 0), badge_text, font=badge_font)
+    text_w = bbox[2] - bbox[0]
+    text_h = bbox[3] - bbox[1]
+    badge_h = max(34, text_h + 18)
+    badge_w = min(text_w + 48, CARD_W - 2 * MARGIN_X)
+    badge_left = (CARD_W - badge_w) // 2
+    badge_top = 24
+    badge_box = (badge_left, badge_top, badge_left + badge_w, badge_top + badge_h)
+    draw.rounded_rectangle(badge_box, radius=badge_h // 2, fill=LIME_BADGE)
     draw.text(
-        ((CARD_W - (bbox[2] - bbox[0])) / 2 - bbox[0], 26 + (badge_h - (bbox[3] - bbox[1])) / 2 - bbox[1]),
+        (
+            (CARD_W - text_w) / 2 - bbox[0],
+            badge_top + (badge_h - text_h) / 2 - bbox[1],
+        ),
         badge_text,
         font=badge_font,
-        fill=(255, 255, 255),
+        fill=SLATE,
     )
     _draw_centered(
         draw,

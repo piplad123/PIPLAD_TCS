@@ -1602,3 +1602,50 @@ a {
 .cert-media:hover .cert-thumb {
   transform: scale(1.02);
 }
+
+/* Horizontally scrollable certificate rail shared by the homepage and the
+   certificates page. Showing two or three readable cards at a time beats a
+   two-column grid where each scan is stretched across half the viewport. */
+.cert-rail {
+  display: flex;
+  gap: 1rem;
+  overflow-x: auto;
+  overscroll-behavior-inline: contain;
+  scroll-snap-type: x mandatory;
+  scroll-padding-inline: 0.25rem;
+  padding: 0.25rem 0.25rem 0.9rem;
+  scrollbar-width: thin;
+  scrollbar-color: #cbd5e1 #f1f5f9;
+  -webkit-overflow-scrolling: touch;
+}
+
+.cert-rail > * {
+  flex: 0 0 clamp(260px, 32vw, 380px);
+  scroll-snap-align: start;
+}
+
+.cert-rail::-webkit-scrollbar {
+  height: 8px;
+}
+
+.cert-rail::-webkit-scrollbar-track {
+  background: #f1f5f9;
+  border-radius: 999px;
+}
+
+.cert-rail::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 999px;
+}
+
+@media (max-width: 800px) {
+  .cert-rail > * {
+    flex-basis: clamp(240px, 46vw, 320px);
+  }
+}
+
+@media (max-width: 520px) {
+  .cert-rail > * {
+    flex-basis: 86vw;
+  }
+}

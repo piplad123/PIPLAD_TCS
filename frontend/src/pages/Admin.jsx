@@ -45,6 +45,7 @@ import {
 } from 'lucide-react';
 
 import {
+  changeAdminPassword,
   clearAdminCredentials,
   createAdminBlogPost,
   createAdminCause,
@@ -3366,6 +3367,9 @@ function CauseManager({ refreshAll }) {
   const [removeImage, setRemoveImage] =
     useState(false);
 
+  const [raisedDirty, setRaisedDirty] =
+    useState(false);
+
   const [saving, setSaving] =
     useState(false);
 
@@ -3425,11 +3429,13 @@ function CauseManager({ refreshAll }) {
     setForm(emptyCauseForm);
     setEditingId(null);
     setRemoveImage(false);
+    setRaisedDirty(false);
   }
 
   function edit(item) {
     setEditingId(item.id);
     setRemoveImage(false);
+    setRaisedDirty(false);
 
     setForm({
       title: item.title,
@@ -3467,6 +3473,7 @@ function CauseManager({ refreshAll }) {
           editingId,
           {
             ...form,
+            raisedAmount: raisedDirty ? form.raisedAmount : '',
             removeImage,
           }
         );
@@ -3568,13 +3575,14 @@ function CauseManager({ refreshAll }) {
           step="0.01"
           placeholder="Amount raised so far (₹)"
           value={form.raisedAmount}
-          onChange={(e) =>
+          onChange={(e) => {
             setForm({
               ...form,
               raisedAmount:
                 e.target.value,
-            })
-          }
+            });
+            setRaisedDirty(true);
+          }}
           style={inputStyle}
         />
 
@@ -3585,8 +3593,8 @@ function CauseManager({ refreshAll }) {
             lineHeight: 1.5,
           }}
         >
-          Amount raised so far. Leave blank to keep the current running
-          total.
+          Amount raised so far. Leave this field untouched to keep the
+          current donation-driven total when saving other changes.
         </small>
 
         <textarea
@@ -5750,6 +5758,11 @@ export default function Admin() {
       'Site Settings',
       Settings,
     ],
+    [
+      'account',
+      'Admin Account',
+      ShieldCheck,
+    ],
   ];
 
   return (
@@ -6125,6 +6138,10 @@ export default function Admin() {
 
           {tab === 'settings' && (
             <SiteSettingsManager />
+          )}
+
+          {tab === 'account' && (
+            <AdminAccountManager />
           )}
 
           {/* =================================================
@@ -8479,6 +8496,166 @@ function SiteSettingsManager() {
 
 
 // ============================================================
+// ADMIN ACCOUNT
+// ============================================================
+
+const emptyPasswordForm = {
+  currentPassword: '',
+  newPassword: '',
+  confirmPassword: '',
+};
+
+function AdminAccountManager() {
+  const [form, setForm] = useState(emptyPasswordForm);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+  const [info, setInfo] = useState('');
+
+  const currentUsername = getAdminCredentials()?.username || 'admin';
+
+  async function submit(e) {
+    e.preventDefault();
+
+    setError('');
+    setInfo('');
+
+    if (!form.currentPassword) {
+      setError('Enter your current password.');
+      return;
+    }
+
+    if (form.newPassword.length < 8) {
+      setError('The new password must be at least 8 characters long.');
+      return;
+    }
+
+    if (form.newPassword !== form.confirmPassword) {
+      setError('The new password and confirmation do not match.');
+      return;
+    }
+
+    setSaving(true);
+
+    try {
+      const data = await changeAdminPassword({
+        currentPassword: form.currentPassword,
+        newPassword: form.newPassword,
+      });
+
+      const username = data?.username || currentUsername;
+      setAdminCredentials(username, form.newPassword);
+      setForm(emptyPasswordForm);
+      setInfo(
+        'Password updated. Use the new password the next time you sign in.'
+      );
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <ManagerSection
+      title="Admin Account"
+      icon={<ShieldCheck size={22} />}
+    >
+      <ErrorMessage message={error} />
+
+      {info && (
+        <div
+          style={{
+            padding: '0.85rem 1rem',
+            marginBottom: '1rem',
+            borderRadius: 8,
+            background: '#dcfce7',
+            color: '#166534',
+          }}
+        >
+          {info}
+        </div>
+      )}
+
+      <div
+        style={{
+          padding: '1rem',
+          marginBottom: '1.5rem',
+          borderRadius: 12,
+          background: '#f0f9ff',
+          border: '1px solid #bae6fd',
+          color: '#0c4a6e',
+          lineHeight: 1.6,
+        }}
+      >
+        The admin username is controlled by the <code>ADMIN_USER</code>{' '}
+        environment variable. You are signed in as{' '}
+        <strong>{currentUsername}</strong>. Changing the password keeps this
+        session signed in; other sessions will need the new password.
+      </div>
+
+      <form onSubmit={submit} style={formGridStyle}>
+        <div>
+          <label style={fieldLabelStyle}>Current password</label>
+          <input
+            type="password"
+            autoComplete="current-password"
+            value={form.currentPassword}
+            onChange={(e) =>
+              setForm({ ...form, currentPassword: e.target.value })
+            }
+            required
+            style={inputStyle}
+          />
+        </div>
+
+        <div>
+          <label style={fieldLabelStyle}>New password</label>
+          <input
+            type="password"
+            autoComplete="new-password"
+            value={form.newPassword}
+            onChange={(e) =>
+              setForm({ ...form, newPassword: e.target.value })
+            }
+            required
+            minLength={8}
+            style={inputStyle}
+          />
+        </div>
+
+        <div>
+          <label style={fieldLabelStyle}>Confirm new password</label>
+          <input
+            type="password"
+            autoComplete="new-password"
+            value={form.confirmPassword}
+            onChange={(e) =>
+              setForm({ ...form, confirmPassword: e.target.value })
+            }
+            required
+            minLength={8}
+            style={inputStyle}
+          />
+        </div>
+
+        <div>
+          <button
+            className="btn"
+            type="submit"
+            disabled={saving}
+            style={primaryButton}
+          >
+            <ShieldCheck size={16} />
+            {saving ? 'Updating...' : 'Update password'}
+          </button>
+        </div>
+      </form>
+    </ManagerSection>
+  );
+}
+
+
+// ============================================================
 // HOME PAGE HERO SLIDES
 // ============================================================
 
@@ -8490,6 +8667,59 @@ const emptyHomeSlideForm = {
   isActive: true,
   file: null,
 };
+
+function normalizeSlideText(value) {
+  return String(value || '').trim().toLowerCase();
+}
+
+function mergeWithDefaults(savedSlides) {
+  const saved = (savedSlides || []).map((slide) => ({
+    ...slide,
+    file: null,
+    removeImage: false,
+  }));
+
+  const remainingDefaults = [];
+
+  defaultHeroSlides.forEach((defaultSlide, index) => {
+    const match = saved.find((slide) => {
+      if (slide.default_key && defaultSlide.key) {
+        return slide.default_key === defaultSlide.key;
+      }
+
+      if (slide.default_key) return false;
+
+      const sameTitle =
+        normalizeSlideText(slide.title) ===
+        normalizeSlideText(defaultSlide.title);
+      const sameImage =
+        Boolean(slide.image_url) &&
+        slide.image_url === defaultSlide.image;
+
+      return sameTitle || sameImage;
+    });
+
+    if (match) {
+      if (!match.defaultKey) {
+        match.defaultKey = defaultSlide.key;
+      }
+      return;
+    }
+
+    remainingDefaults.push({
+      id: -(index + 1),
+      defaultKey: defaultSlide.key,
+      ...defaultSlide,
+      image_url: defaultSlide.image,
+      display_order: index,
+      is_active: true,
+      file: null,
+      removeImage: false,
+    });
+  });
+
+  return [...saved, ...remainingDefaults];
+}
 
 function SlideImagePreview({ item }) {
   const [previewUrl, setPreviewUrl] = useState(null);
@@ -8587,20 +8817,10 @@ function HomeHeroManager() {
     setLoading(true);
     try {
       const slides = await fetchAdminHomeSlides();
-      if (slides && slides.length > 0) {
-        setItems(slides);
-      } else {
-        setItems(
-          defaultHeroSlides.map((slide, index) => ({
-            id: -(index + 1),
-            ...slide,
-            image_url: slide.image,
-            is_active: true,
-          }))
-        );
-      }
+      setItems(mergeWithDefaults(slides));
       setError('');
     } catch (e) {
+      setItems(mergeWithDefaults([]));
       setError(e.message);
     } finally {
       setLoading(false);
@@ -8635,6 +8855,7 @@ function HomeHeroManager() {
 
     try {
       const fields = {
+        defaultKey: item.defaultKey || item.default_key || '',
         eyebrow: item.eyebrow || '',
         title: item.title || '',
         highlight: item.highlight || '',
@@ -8645,11 +8866,26 @@ function HomeHeroManager() {
       };
 
       if (item.id < 0) {
-        await createAdminHomeSlide({
+        const created = await createAdminHomeSlide({
           ...fields,
-          imageUrl: item.file ? '' : item.image_url || '',
+          imageUrl:
+            item.file || item.removeImage ? '' : item.image_url || '',
         });
-        await load();
+
+        setItems((current) =>
+          current.map((slide) =>
+            slide.id === id
+              ? {
+                  ...created,
+                  file: null,
+                  removeImage: false,
+                  defaultKey:
+                    created.default_key || item.defaultKey || '',
+                }
+              : slide
+          )
+        );
+
         setNotice('Slide created and saved.');
       } else {
         const updated = await updateAdminHomeSlide(id, {
@@ -8660,7 +8896,15 @@ function HomeHeroManager() {
 
         setItems((current) =>
           current.map((slide) =>
-            slide.id === id ? { ...updated, file: null } : { ...slide, file: null }
+            slide.id === id
+              ? {
+                  ...updated,
+                  file: null,
+                  removeImage: false,
+                  defaultKey:
+                    updated.default_key || item.defaultKey || '',
+                }
+              : slide
           )
         );
 
@@ -8712,6 +8956,15 @@ function HomeHeroManager() {
   }
 
   async function removeSlide(id) {
+    const item = items.find((slide) => slide.id === id);
+
+    if (item?.defaultKey) {
+      setNotice(
+        'Built-in slides cannot be deleted. Turn off Active and save to hide this slide instead.'
+      );
+      return;
+    }
+
     if (!window.confirm('Delete this home slide?')) {
       return;
     }
@@ -8743,19 +8996,26 @@ function HomeHeroManager() {
 
     const next = [...items];
     const current = next[index];
-    next[index] = next[target];
+    const targetItem = next[target];
+
+    if (current.id < 0 || targetItem.id < 0) {
+      setNotice(
+        'Save the default slide first, then you can move it up or down.'
+      );
+      return;
+    }
+
+    next[index] = targetItem;
     next[target] = current;
 
     setItems(next);
-
-    if (items.some((slide) => slide.id < 0)) {
-      setNotice('Order updated. Reorder is saved permanently once all slides are created.');
-      return;
-    }
+    setError('');
+    setNotice('');
 
     try {
       await reorderAdminHomeSlides(next.map((slide) => slide.id));
       await load();
+      setNotice('Slide order saved.');
     } catch (e) {
       setError(e.message);
       await load();
@@ -8795,8 +9055,9 @@ function HomeHeroManager() {
         }}
       >
         These are the rotating banner slides at the top of the homepage. The
-        current 4 default slides are shown below — edit them and press Save to
-        persist your changes, or use the form above to add brand-new slides.
+        built-in slides are always listed below — edit one and press Save to
+        persist your changes, turn off Active to hide it, or use the form above
+        to add a brand-new slide.
       </div>
 
       <form
@@ -8921,8 +9182,8 @@ function HomeHeroManager() {
           <p>Loading...</p>
         ) : items.length === 0 ? (
           <p style={{ color: '#64748b' }}>
-            No custom slides yet. The default slides are live on the homepage —
-            use the form above to add your own.
+            No slides are configured. Reload the page to restore the built-in
+            defaults, or use the form above to add a custom slide.
           </p>
         ) : (
           items.map((item, index) => (
@@ -9077,9 +9338,18 @@ function HomeHeroManager() {
                     <button
                       className="btn"
                       onClick={() => moveSlide(index, -1)}
-                      disabled={index === 0 || loading}
+                      disabled={
+                        index === 0 ||
+                        loading ||
+                        item.id < 0 ||
+                        items[index - 1]?.id < 0
+                      }
                       style={outlineButton}
-                      title="Move up"
+                      title={
+                        item.id < 0
+                          ? 'Save this default slide before reordering'
+                          : 'Move up'
+                      }
                     >
                       <ArrowUp size={15} />
                     </button>
@@ -9087,9 +9357,18 @@ function HomeHeroManager() {
                     <button
                       className="btn"
                       onClick={() => moveSlide(index, 1)}
-                      disabled={index === items.length - 1 || loading}
+                      disabled={
+                        index === items.length - 1 ||
+                        loading ||
+                        item.id < 0 ||
+                        items[index + 1]?.id < 0
+                      }
                       style={outlineButton}
-                      title="Move down"
+                      title={
+                        item.id < 0
+                          ? 'Save this default slide before reordering'
+                          : 'Move down'
+                      }
                     >
                       <ArrowDown size={15} />
                     </button>
@@ -9097,8 +9376,17 @@ function HomeHeroManager() {
                     <button
                       className="btn"
                       onClick={() => removeSlide(item.id)}
-                      disabled={busyId === item.id || loading}
+                      disabled={
+                        busyId === item.id ||
+                        loading ||
+                        Boolean(item.defaultKey)
+                      }
                       style={dangerButton}
+                      title={
+                        item.defaultKey
+                          ? 'Save and turn off Active to hide this built-in slide'
+                          : 'Delete slide'
+                      }
                     >
                       <Trash2 size={15} />
                       Delete

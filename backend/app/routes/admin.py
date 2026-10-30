@@ -1,3 +1,4 @@
+import hashlib
 import json
 import logging
 import os
@@ -32,6 +33,7 @@ from sqlalchemy.orm import Session
 from ..database import SessionLocal, get_db
 
 from ..models import (
+    AdminCredential,
     Blog,
     Cause,
     Certificate,
@@ -51,6 +53,7 @@ from ..models import (
 )
 
 from ..schemas import (
+    AdminPasswordUpdate,
     BlogResponse,
     CertificateResponse,
     CauseResponse,
@@ -171,20 +174,71 @@ DEFAULT_GALLERY_CATEGORIES = [
 # ADMIN AUTHENTICATION
 # ============================================================
 
+ADMIN_PASSWORD_SCHEME = "pbkdf2_sha256"
+ADMIN_PASSWORD_ITERATIONS = 240_000
+
+
+def _hash_admin_password(password: str) -> str:
+    salt = secrets.token_bytes(16)
+    digest = hashlib.pbkdf2_hmac(
+        "sha256",
+        password.encode("utf-8"),
+        salt,
+        ADMIN_PASSWORD_ITERATIONS,
+    )
+    return (
+        f"{ADMIN_PASSWORD_SCHEME}${ADMIN_PASSWORD_ITERATIONS}"
+        f"${salt.hex()}${digest.hex()}"
+    )
+
+
+def _verify_admin_password(password: str, stored_hash: str) -> bool:
+    try:
+        scheme, iterations, salt_hex, digest_hex = stored_hash.split("$", 3)
+        if scheme != ADMIN_PASSWORD_SCHEME:
+            return False
+        digest = hashlib.pbkdf2_hmac(
+            "sha256",
+            password.encode("utf-8"),
+            bytes.fromhex(salt_hex),
+            int(iterations),
+        )
+        return secrets.compare_digest(digest.hex(), digest_hex)
+    except (TypeError, ValueError):
+        return False
+
+
+def _admin_password_row(db: Session) -> Optional[AdminCredential]:
+    return (
+        db.query(AdminCredential)
+        .order_by(AdminCredential.id.asc())
+        .first()
+    )
+
+
+def _verify_current_admin_password(db: Session, password: str) -> bool:
+    row = _admin_password_row(db)
+    if row:
+        return _verify_admin_password(password, row.password_hash)
+    return secrets.compare_digest(
+        password,
+        os.getenv("ADMIN_PASSWORD", "admin"),
+    )
+
+
 def get_current_admin(
     credentials: HTTPBasicCredentials = Depends(security),
+    db: Session = Depends(get_db),
 ):
     correct_username = secrets.compare_digest(
         credentials.username,
         os.getenv("ADMIN_USER", "admin"),
     )
 
-    correct_password = secrets.compare_digest(
+    if not correct_username or not _verify_current_admin_password(
+        db,
         credentials.password,
-         os.getenv("ADMIN_PASSWORD", "admin"),
-    )
-
-    if not (correct_username and correct_password):
+    ):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid authentication credentials",
@@ -194,6 +248,40 @@ def get_current_admin(
         )
 
     return credentials.username
+
+
+@router.put("/credentials/password")
+def update_admin_password(
+    payload: AdminPasswordUpdate,
+    db: Session = Depends(get_db),
+    username: str = Depends(get_current_admin),
+):
+    if not _verify_current_admin_password(db, payload.current_password):
+        raise HTTPException(400, "Current password is incorrect.")
+
+    if secrets.compare_digest(
+        payload.current_password,
+        payload.new_password,
+    ):
+        raise HTTPException(
+            400,
+            "New password must be different from the current password.",
+        )
+
+    new_hash = _hash_admin_password(payload.new_password)
+    row = _admin_password_row(db)
+
+    if row:
+        row.password_hash = new_hash
+    else:
+        db.add(AdminCredential(password_hash=new_hash))
+
+    db.commit()
+
+    return {
+        "message": "Password updated successfully.",
+        "username": username,
+    }
 
 
 # ============================================================

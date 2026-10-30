@@ -517,6 +517,7 @@ class VerifiedVolunteerResponse(BaseModel):
 
 class HomeSlideResponse(BaseModel):
     id: int
+    default_key: Optional[str] = None
     eyebrow: Optional[str] = None
     title: str
     highlight: Optional[str] = None
@@ -524,10 +525,15 @@ class HomeSlideResponse(BaseModel):
     image_url: Optional[str] = None
     display_order: int = 0
     is_active: bool = True
-    created_at: datetime
+    created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class AdminPasswordUpdate(BaseModel):
+    current_password: str = Field(min_length=1, max_length=128)
+    new_password: str = Field(min_length=8, max_length=128)
 
 
 # ============================================================

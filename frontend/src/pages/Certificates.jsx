@@ -59,11 +59,10 @@ export default function Certificates() {
             </div>
           ) : (
             <div
-              style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
-                gap: '1.5rem',
-              }}
+              className="cert-rail"
+              role="region"
+              aria-label="Certificates"
+              tabIndex={0}
             >
               {certificates.map((certificate) => (
                 <article

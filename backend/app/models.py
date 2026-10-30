@@ -509,6 +509,25 @@ class SiteSetting(Base):
     )
 
 
+class AdminCredential(Base):
+    """Hashed admin password override.
+
+    The username continues to come from ``ADMIN_USER``; this table only stores
+    a password hash once the admin changes the password from the dashboard.
+    While the table is empty the backend falls back to ``ADMIN_PASSWORD``.
+    """
+
+    __tablename__ = "admin_credentials"
+
+    id = Column(Integer, primary_key=True, index=True)
+    password_hash = Column(String(500), nullable=False)
+    updated_at = Column(
+        DateTime,
+        default=datetime.utcnow,
+        onupdate=datetime.utcnow,
+    )
+
+
 class HomeSlide(Base):
     """Home-page hero slider slide, editable by the admin.
 
@@ -519,6 +538,7 @@ class HomeSlide(Base):
     __tablename__ = "home_slides"
 
     id = Column(Integer, primary_key=True, index=True)
+    default_key = Column(String(100), nullable=True, index=True)
     eyebrow = Column(String(255), nullable=True, default="")
     title = Column(String(255), nullable=False)
     highlight = Column(String(255), nullable=True, default="")

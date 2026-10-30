@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Award, CalendarDays, Image as ImageIcon, Video, X } from 'lucide-react';
-import { useLocation } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { cloudinaryUrl, fetchGalleryItems, fetchUpcomingProjects, fetchVideos, resolveMediaUrl } from '../api';
 
 function formatDate(value) {
@@ -128,12 +128,12 @@ export default function Gallery() {
     "Browse photos and videos of Piplad Welfare Foundation's community work, drives, and impact."
   );
   const location = useLocation();
+  const navigate = useNavigate();
   const [photos, setPhotos] = useState([]);
   const [videos, setVideos] = useState([]);
   const [projects, setProjects] = useState([]);
   const [photoCategory, setPhotoCategory] = useState('All');
   const [videoCategory, setVideoCategory] = useState('All');
-  const [selectedAlbum, setSelectedAlbum] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -181,6 +181,74 @@ export default function Gallery() {
     () => groupPhotoAlbums(filteredPhotos),
     [filteredPhotos]
   );
+
+  const selectedAlbumId = location.state?.galleryAlbumId || null;
+
+  const selectedAlbum = useMemo(() => {
+    if (!selectedAlbumId) return null;
+
+    return (
+      photoAlbums.find((album) => album.id === selectedAlbumId) ||
+      groupPhotoAlbums(photos).find((album) => album.id === selectedAlbumId) ||
+      null
+    );
+  }, [photoAlbums, photos, selectedAlbumId]);
+
+  const openAlbum = useCallback(
+    (album) => {
+      navigate(
+        {
+          pathname: location.pathname,
+          search: location.search,
+          hash: location.hash,
+        },
+        {
+          state: {
+            ...location.state,
+            galleryAlbumId: album.id,
+            galleryAlbumOpened: true,
+          },
+        }
+      );
+    },
+    [location.hash, location.pathname, location.search, location.state, navigate]
+  );
+
+  const closeAlbum = useCallback(() => {
+    if (location.state?.galleryAlbumOpened) {
+      navigate(-1);
+      return;
+    }
+
+    navigate(
+      {
+        pathname: location.pathname,
+        search: location.search,
+        hash: location.hash,
+      },
+      {
+        replace: true,
+        state: {
+          ...location.state,
+          galleryAlbumId: null,
+          galleryAlbumOpened: false,
+        },
+      }
+    );
+  }, [location.hash, location.pathname, location.search, location.state, navigate]);
+
+  useEffect(() => {
+    if (!selectedAlbum) return undefined;
+
+    function handleKeyDown(event) {
+      if (event.key === 'Escape') {
+        closeAlbum();
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [closeAlbum, selectedAlbum]);
 
   const filteredVideos = useMemo(() => {
     if (videoCategory === 'All') return videos;
@@ -237,7 +305,7 @@ export default function Gallery() {
                       <button
                         type="button"
                         key={album.id}
-                        onClick={() => setSelectedAlbum(album)}
+                        onClick={() => openAlbum(album)}
                         aria-label={`Open ${album.title} album`}
                         style={{
                           border: 'none',
@@ -333,7 +401,7 @@ export default function Gallery() {
               role="dialog"
               aria-modal="true"
               aria-label={`${selectedAlbum.title} album`}
-              onClick={() => setSelectedAlbum(null)}
+              onClick={closeAlbum}
               style={{
                 position: 'fixed',
                 inset: 0,
@@ -346,7 +414,7 @@ export default function Gallery() {
               <button
                 type="button"
                 aria-label="Close album"
-                onClick={() => setSelectedAlbum(null)}
+                onClick={closeAlbum}
                 style={{
                   position: 'fixed',
                   top: '1rem',

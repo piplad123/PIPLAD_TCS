@@ -1,5 +1,6 @@
 export const defaultHeroSlides = [
   {
+    key: 'education',
     eyebrow: 'Education for All',
     title: 'Empowering Minds,',
     highlight: 'Illuminating Futures',
@@ -7,6 +8,7 @@ export const defaultHeroSlides = [
     image: 'https://images.unsplash.com/photo-1509062522246-3755977927d7?auto=format&fit=crop&q=85&w=1400',
   },
   {
+    key: 'nutrition',
     eyebrow: 'Food for All',
     title: 'Nourishing Hope,',
     highlight: 'One Meal at a Time',
@@ -14,6 +16,7 @@ export const defaultHeroSlides = [
     image: 'https://images.unsplash.com/photo-1488521787991-ed7bbaae773c?auto=format&fit=crop&q=85&w=1400',
   },
   {
+    key: 'environment',
     eyebrow: 'Grow Green, Live Clean',
     title: "Together, Let's Plant",
     highlight: 'the Seeds for Tomorrow',
@@ -21,6 +24,7 @@ export const defaultHeroSlides = [
     image: 'https://images.unsplash.com/photo-1497250681960-ef046c08a56e?auto=format&fit=crop&q=85&w=1400',
   },
   {
+    key: 'healthcare',
     eyebrow: 'Swift Aid, Strong Hope',
     title: 'Every Second',
     highlight: 'Saves a Life',

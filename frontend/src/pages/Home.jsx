@@ -91,15 +91,29 @@ export default function Home({ onOpenDonate, onSelectCauseToDonate }) {
   // them as either/or meant that saving a single slide silently dropped the
   // other four from the carousel.
   const activeSlides = useMemo(() => {
-    const savedTitles = new Set(
-      slides.map((s) => (s.title || '').trim())
+    const normalize = (value) =>
+      String(value || '').trim().toLowerCase();
+
+    const activeSavedSlides = slides.filter(
+      (saved) => saved.is_active !== false
     );
 
-    const remainingDefaults = heroSlides
-      .filter((def) => !savedTitles.has((def.title || '').trim()))
-      .map((def) => ({ ...def, image: def.image }));
+    const remainingDefaults = heroSlides.filter((def) => {
+      return !slides.some((saved) => {
+        if (saved.default_key && def.key) {
+          return saved.default_key === def.key;
+        }
 
-    return [...slides, ...remainingDefaults];
+        if (saved.default_key) return false;
+
+        return (
+          normalize(saved.title) === normalize(def.title) ||
+          (saved.image_url && saved.image_url === def.image)
+        );
+      });
+    });
+
+    return [...activeSavedSlides, ...remainingDefaults];
   }, [slides]);
 
   // Avoid a % 0 in the autoplay timer before anything has loaded.
@@ -507,7 +521,12 @@ export default function Home({ onOpenDonate, onSelectCauseToDonate }) {
           ) : featuredCertificates.length === 0 ? (
             <div className="home-empty-state">Certification documents will be displayed here soon.</div>
           ) : (
-            <div className="home-certificate-grid">
+            <div
+              className="cert-rail"
+              role="region"
+              aria-label="Certification documents"
+              tabIndex={0}
+            >
               {featuredCertificates.map((certificate) => (
                 <article className="home-certificate-card" key={certificate.id}>
                   {certificate.image_url ? (

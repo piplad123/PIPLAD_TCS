@@ -1,6 +1,6 @@
 """Home-page hero slide management.
 
-- ``GET /api/home/slides``          -> public, ordered, only active slides
+- ``GET /api/home/slides``          -> public, ordered active slides plus inactive built-in defaults
 - ``GET /api/admin/home/slides``    -> admin, all slides in display order
 - ``POST /api/admin/home/slides``   -> admin, create a slide (image + text)
 - ``PUT /api/admin/home/slides/{id}`` -> admin, edit a slide (image optional)
@@ -11,6 +11,7 @@
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from ..database import get_db
@@ -36,13 +37,26 @@ def _slide_visible(slide: HomeSlide) -> bool:
 
 @router.get("/api/home/slides", response_model=List[HomeSlideResponse])
 def get_public_home_slides(db: Session = Depends(get_db)):
+    # Inactive built-in slides are returned (but not rendered) so the
+    # homepage can hide the matching built-in default when an admin turns it
+    # off. Custom inactive slides stay completely private.
     slides = (
         db.query(HomeSlide)
-        .filter(HomeSlide.is_active.is_(True))
+        .filter(
+            or_(
+                HomeSlide.is_active.is_(True),
+                HomeSlide.default_key.isnot(None),
+            )
+        )
         .order_by(HomeSlide.display_order.asc(), HomeSlide.id.asc())
         .all()
     )
-    return [slide for slide in slides if _slide_visible(slide)]
+    return [
+        slide
+        for slide in slides
+        if (slide.is_active and _slide_visible(slide))
+        or (not slide.is_active and slide.default_key)
+    ]
 
 
 # ============================================================
@@ -85,9 +99,15 @@ def _clean_image_url(value: Optional[str]) -> Optional[str]:
     return None
 
 
+def _clean_default_key(value: Optional[str]) -> Optional[str]:
+    cleaned = _clean_form_value(value)
+    return cleaned[:100] or None
+
+
 @router.post("/api/admin/home/slides", response_model=HomeSlideResponse)
 def create_home_slide(
     title: str = Form(...),
+    default_key: Optional[str] = Form(None),
     eyebrow: Optional[str] = Form(None),
     highlight: Optional[str] = Form(None),
     text: Optional[str] = Form(None),
@@ -119,6 +139,7 @@ def create_home_slide(
         next_order = (last.display_order + 1) if last else 1
 
     slide = HomeSlide(
+        default_key=_clean_default_key(default_key),
         eyebrow=_clean_form_value(eyebrow),
         title=clean_title,
         highlight=_clean_form_value(highlight),
@@ -139,6 +160,7 @@ def create_home_slide(
 def update_home_slide(
     slide_id: int,
     title: Optional[str] = Form(None),
+    default_key: Optional[str] = Form(None),
     eyebrow: Optional[str] = Form(None),
     highlight: Optional[str] = Form(None),
     text: Optional[str] = Form(None),
@@ -164,6 +186,9 @@ def update_home_slide(
         if not clean_title:
             raise HTTPException(400, "Slide title is required.")
         slide.title = clean_title
+
+    if default_key is not None:
+        slide.default_key = _clean_default_key(default_key)
 
     if eyebrow is not None:
         slide.eyebrow = _clean_form_value(eyebrow)
