@@ -727,17 +727,20 @@ export async function fetchUpcomingProjects() {
 // ============================================================
 
 export async function fetchDonationsList() {
-  const res = await fetch(`${API_BASE_URL}/donate`);
-
-  if (!res.ok) {
-    throw new Error('Failed to fetch donations');
-  }
-
-  return res.json();
+  const data = await adminFetch('/admin/donations?page=1&page_size=100');
+  return data.items;
 }
 
 export async function fetchAdminDonations(page = 1, pageSize = 10) {
   return adminFetch(`/admin/donations?page=${page}&page_size=${pageSize}`);
+}
+
+export async function createOfflineDonation(donation) {
+  return adminFetch('/admin/donations/offline', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(donation),
+  });
 }
 
 export async function resendAdminDonationReceipt(id) {

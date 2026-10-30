@@ -61,6 +61,7 @@ from ..schemas import (
     CertificateResponse,
     CauseResponse,
     DonationListResponse,
+    OfflineDonationCreate,
     DonationResponse,
 FooterFocusItemResponse,
     FooterQuickLinkResponse,
@@ -2472,6 +2473,24 @@ def get_admin_donations(
         "page": page,
         "page_size": page_size,
     }
+
+
+@router.post("/donations/offline", response_model=DonationResponse)
+def create_offline_donation(
+    payload: OfflineDonationCreate,
+    db: Session = Depends(get_db),
+    _: str = Depends(get_current_admin),
+):
+    donation = Donation(
+        donor_name=payload.donor_name.strip(),
+        donor_email=payload.donor_email.strip(),
+        amount=Decimal(str(payload.amount)),
+        status="completed",
+    )
+    db.add(donation)
+    db.commit()
+    db.refresh(donation)
+    return donation
 
 
 @router.post(

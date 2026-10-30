@@ -18,6 +18,7 @@ from ..schemas import RazorpayOrderCreate, RazorpayVerifyRequest, DonationRespon
 from ..donation_receipt import build_donation_receipt_html
 from ..email_service import send_admin_alert_email, send_donation_documents_email
 from ..certificate_pdf import build_donation_receipt_pdf
+from .admin import get_current_admin
 
 try:
     import razorpay
@@ -362,5 +363,8 @@ async def razorpay_webhook(request: Request, db: Session = Depends(get_db)):
 
 
 @router.get("", response_model=List[DonationResponse])
-def get_donations(db: Session = Depends(get_db)):
+def get_donations(
+    db: Session = Depends(get_db),
+    _: str = Depends(get_current_admin),
+):
     return db.query(Donation).order_by(Donation.created_at.desc()).all()

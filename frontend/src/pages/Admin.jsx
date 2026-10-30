@@ -114,6 +114,7 @@ import {
   resendAdminVolunteerCard,
   resendAdminVolunteerRejection,
   fetchAdminDonations,
+  createOfflineDonation,
   fetchAdminDonationEmailPreview,
   resendAdminDonationReceipt,
   fetchAdminImpact,
@@ -2018,13 +2019,17 @@ function VolunteerManager() {
 // DONATION MANAGER
 // ============================================================
 
-function DonationManager() {
+function DonationManager({ refreshAll }) {
   const [items, setItems] = useState([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [pageSize] = useState(5);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [savingOffline, setSavingOffline] = useState(false);
+  const [offlineDonation, setOfflineDonation] = useState({
+    donor_name: '', donor_email: '', amount: '',
+  });
 
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
@@ -2040,6 +2045,24 @@ function DonationManager() {
       setError(e.message);
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function addOfflineDonation(event) {
+    event.preventDefault();
+    setSavingOffline(true);
+    setError('');
+    try {
+      await createOfflineDonation({
+        ...offlineDonation,
+        amount: Number(offlineDonation.amount),
+      });
+      setOfflineDonation({ donor_name: '', donor_email: '', amount: '' });
+      await Promise.all([load(1), refreshAll()]);
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setSavingOffline(false);
     }
   }
 
@@ -2126,6 +2149,15 @@ function DonationManager() {
     >
       <ErrorMessage message={error} />
 
+      <form onSubmit={addOfflineDonation} style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: '.75rem', marginBottom: '1.5rem' }}>
+        <input aria-label="Donor name" placeholder="Donor name" value={offlineDonation.donor_name} onChange={(e) => setOfflineDonation({ ...offlineDonation, donor_name: e.target.value })} required maxLength={255} style={inputStyle} />
+        <input aria-label="Donor email" type="email" placeholder="Donor email" value={offlineDonation.donor_email} onChange={(e) => setOfflineDonation({ ...offlineDonation, donor_email: e.target.value })} required style={inputStyle} />
+        <input aria-label="Donation amount" type="number" min="0.01" step="0.01" placeholder="Amount (INR)" value={offlineDonation.amount} onChange={(e) => setOfflineDonation({ ...offlineDonation, amount: e.target.value })} required style={inputStyle} />
+        <button className="btn" type="submit" disabled={savingOffline} style={primaryButton}>
+          <Plus size={16} /> {savingOffline ? 'Adding...' : 'Add offline donation'}
+        </button>
+      </form>
+
       {!loading && total > 0 && (
         <p style={metaStyle}>
           Showing {((page - 1) * pageSize) + 1}–
@@ -2157,7 +2189,7 @@ function DonationManager() {
                     {item.donor_phone ? ` · ${item.donor_phone}` : ''}
                   </p>
                   <p style={{ color: '#64748b', margin: 0 }}>
-                    {item.razorpay_order_id || '—'} ·{' '}
+                    {item.razorpay_order_id || 'Offline'} ·{' '}
                     {new Date(item.created_at).toLocaleString()}
                   </p>
                 </div>
@@ -6110,7 +6142,7 @@ export default function Admin() {
           )}
 
           {tab === 'donations' && (
-            <DonationManager />
+            <DonationManager refreshAll={loadDashboard} />
           )}
 
           {tab === 'visitors' && (

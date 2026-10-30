@@ -559,3 +559,9 @@ class NewsletterSubscriberResponse(BaseModel):
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class OfflineDonationCreate(BaseModel):
+    donor_name: str = Field(min_length=1, max_length=255)
+    donor_email: str = Field(min_length=3, max_length=255)
+    amount: float = Field(gt=0)
