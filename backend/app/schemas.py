@@ -536,6 +536,12 @@ class AdminPasswordUpdate(BaseModel):
     new_password: str = Field(min_length=8, max_length=128)
 
 
+class AdminPasswordResetComplete(BaseModel):
+    challenge_id: str = Field(min_length=32, max_length=128)
+    otp: str = Field(pattern=r"^\d{8}$")
+    new_password: str = Field(min_length=8, max_length=128)
+
+
 # ============================================================
 # NEWSLETTER
 # ============================================================

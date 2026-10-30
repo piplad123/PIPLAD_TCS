@@ -79,6 +79,8 @@ import {
   fetchAdminMentors,
   fetchAdminProjects,
   fetchAdminStats,
+  requestAdminPasswordReset,
+  completeAdminPasswordReset,
   fetchAdminVisits,
   fetchAdminTeam,
   fetchAdminTeamCard,
@@ -363,12 +365,19 @@ function AdminLogin({ onLogin }) {
   const [username, setUsername] = useState('admin');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
   const [loading, setLoading] = useState(false);
+  const [recoveryOpen, setRecoveryOpen] = useState(false);
+  const [challengeId, setChallengeId] = useState('');
+  const [otp, setOtp] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
 
   async function submit(e) {
     e.preventDefault();
 
     setError('');
+    setNotice('');
     setLoading(true);
 
     try {
@@ -388,6 +397,53 @@ function AdminLogin({ onLogin }) {
           ? 'Invalid admin username or password.'
           : err.message
       );
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function sendResetCode(e) {
+    e.preventDefault();
+    setError('');
+    setNotice('');
+    setLoading(true);
+    try {
+      const result = await requestAdminPasswordReset();
+      setChallengeId(result.challenge_id);
+      setNotice('A one-time code was sent to pipladfoundation@gmail.com.');
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function resetPassword(e) {
+    e.preventDefault();
+    setError('');
+    setNotice('');
+    if (newPassword !== confirmPassword) {
+      setError('The passwords do not match.');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      await completeAdminPasswordReset({
+        challengeId,
+        otp,
+        newPassword,
+      });
+      clearAdminCredentials();
+      setRecoveryOpen(false);
+      setChallengeId('');
+      setOtp('');
+      setNewPassword('');
+      setConfirmPassword('');
+      setPassword('');
+      setNotice('Password reset. Sign in with your new password.');
+    } catch (err) {
+      setError(err.message);
     } finally {
       setLoading(false);
     }
@@ -442,7 +498,13 @@ function AdminLogin({ onLogin }) {
           <ErrorMessage
             message={error}
           />
+          {notice && (
+            <p role="status" style={{ color: '#047857', margin: '0 0 1rem' }}>
+              {notice}
+            </p>
+          )}
 
+          {!recoveryOpen ? (
           <form onSubmit={submit}>
             <label
               style={{
@@ -503,6 +565,135 @@ function AdminLogin({ onLogin }) {
                 : 'Sign in'}
             </button>
           </form>
+          ) : !challengeId ? (
+            <form onSubmit={sendResetCode}>
+              <p style={{ color: '#475569', lineHeight: 1.5, marginTop: 0 }}>
+                A password reset code can only be sent to pipladfoundation@gmail.com.
+              </p>
+              <button
+                className="btn"
+                type="submit"
+                disabled={loading}
+                style={{
+                  width: '100%',
+                  background: '#059669',
+                  color: '#fff',
+                  border: 0,
+                }}
+              >
+                <Mail size={17} />
+                {loading ? 'Sending code...' : 'Send reset code'}
+              </button>
+              <button
+                type="button"
+                onClick={() => { setRecoveryOpen(false); setError(''); setNotice(''); }}
+                style={{
+                  width: '100%',
+                  marginTop: '.75rem',
+                  padding: '.6rem',
+                  border: 0,
+                  background: 'transparent',
+                  color: '#475569',
+                  cursor: 'pointer',
+                }}
+              >
+                Back to login
+              </button>
+            </form>
+          ) : (
+            <form onSubmit={resetPassword}>
+              <label style={{ display: 'block', fontWeight: 600, marginBottom: 6 }}>
+                8-digit email code
+              </label>
+              <input
+                type="text"
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                pattern="[0-9]{8}"
+                maxLength={8}
+                value={otp}
+                onChange={(e) => setOtp(e.target.value.replace(/\D/g, ''))}
+                required
+                style={inputStyle}
+              />
+              <label style={{ display: 'block', fontWeight: 600, margin: '1rem 0 6px' }}>
+                New password
+              </label>
+              <input
+                type="password"
+                autoComplete="new-password"
+                minLength={8}
+                maxLength={128}
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                required
+                style={inputStyle}
+              />
+              <label style={{ display: 'block', fontWeight: 600, margin: '1rem 0 6px' }}>
+                Confirm new password
+              </label>
+              <input
+                type="password"
+                autoComplete="new-password"
+                minLength={8}
+                maxLength={128}
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                required
+                style={inputStyle}
+              />
+              <button
+                className="btn"
+                type="submit"
+                disabled={loading}
+                style={{
+                  width: '100%',
+                  marginTop: '1.25rem',
+                  background: '#059669',
+                  color: '#fff',
+                  border: 0,
+                }}
+              >
+                <ShieldCheck size={17} />
+                {loading ? 'Resetting password...' : 'Reset password'}
+              </button>
+              <button
+                type="button"
+                onClick={() => { setChallengeId(''); setOtp(''); setError(''); setNotice(''); }}
+                style={{
+                  width: '100%',
+                  marginTop: '.75rem',
+                  padding: '.6rem',
+                  border: 0,
+                  background: 'transparent',
+                  color: '#047857',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                }}
+              >
+                Request a new code
+              </button>
+            </form>
+          )}
+
+          {!recoveryOpen && (
+            <button
+              type="button"
+              onClick={() => { setRecoveryOpen(true); setError(''); setNotice(''); }}
+              style={{
+                width: '100%',
+                marginTop: '.75rem',
+                padding: '.6rem',
+                border: 0,
+                background: 'transparent',
+                color: '#047857',
+                fontWeight: 600,
+                cursor: 'pointer',
+              }}
+            >
+              Forgot password?
+            </button>
+          )}
         </div>
       </div>
     </section>

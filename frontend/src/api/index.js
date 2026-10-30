@@ -253,6 +253,36 @@ export async function changeAdminPassword({
   });
 }
 
+async function adminPasswordRecoveryRequest(path, body = {}) {
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+    cache: 'no-store',
+  });
+
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(data.detail || 'Password recovery request failed.');
+  }
+  return data;
+}
+
+export function requestAdminPasswordReset() {
+  return adminPasswordRecoveryRequest('/admin/credentials/password-reset/request');
+}
+
+export function completeAdminPasswordReset({ challengeId, otp, newPassword }) {
+  return adminPasswordRecoveryRequest(
+    '/admin/credentials/password-reset/complete',
+    {
+      challenge_id: challengeId,
+      otp,
+      new_password: newPassword,
+    }
+  );
+}
+
 
 // ============================================================
 // ADMIN DASHBOARD

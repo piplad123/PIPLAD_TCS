@@ -1,4 +1,5 @@
 import hashlib
+import hmac
 import json
 import logging
 import os
@@ -34,6 +35,7 @@ from ..database import SessionLocal, get_db
 
 from ..models import (
     AdminCredential,
+    AdminPasswordReset,
     Blog,
     Cause,
     Certificate,
@@ -54,6 +56,7 @@ from ..models import (
 
 from ..schemas import (
     AdminPasswordUpdate,
+    AdminPasswordResetComplete,
     BlogResponse,
     CertificateResponse,
     CauseResponse,
@@ -71,6 +74,7 @@ FooterFocusItemResponse,
 )
 
 from ..email_service import (
+    send_admin_password_reset_otp,
     send_team_card_email,
     send_volunteer_rejection_email,
     send_volunteer_welcome_email,
@@ -224,6 +228,120 @@ def _verify_current_admin_password(db: Session, password: str) -> bool:
         password,
         os.getenv("ADMIN_PASSWORD", "admin"),
     )
+
+
+def _password_reset_secret() -> bytes:
+    secret = os.getenv("ADMIN_RESET_OTP_SECRET", "").strip()
+    if len(secret) < 32:
+        raise HTTPException(
+            status_code=503,
+            detail="Password recovery is not configured.",
+        )
+    return secret.encode("utf-8")
+
+
+def _password_reset_otp_hash(secret: bytes, challenge_id: str, otp: str) -> str:
+    message = f"{challenge_id}:{otp}".encode("utf-8")
+    return hmac.new(secret, message, hashlib.sha256).hexdigest()
+
+
+@router.post("/credentials/password-reset/request")
+def request_admin_password_reset(db: Session = Depends(get_db)):
+    secret = _password_reset_secret()
+    now = datetime.utcnow()
+
+    db.query(AdminPasswordReset).filter(
+        AdminPasswordReset.created_at < now - timedelta(days=1)
+    ).delete(synchronize_session=False)
+
+    recent_requests = (
+        db.query(func.count(AdminPasswordReset.id))
+        .filter(AdminPasswordReset.created_at >= now - timedelta(hours=1))
+        .scalar()
+    )
+    if recent_requests >= 3:
+        db.commit()
+        raise HTTPException(
+            status_code=429,
+            detail="Too many reset requests. Try again later.",
+        )
+
+    db.query(AdminPasswordReset).filter(
+        AdminPasswordReset.used_at.is_(None)
+    ).update({AdminPasswordReset.used_at: now}, synchronize_session=False)
+
+    challenge_id = secrets.token_urlsafe(32)
+    otp = f"{secrets.randbelow(100_000_000):08d}"
+    reset = AdminPasswordReset(
+        challenge_hash=hashlib.sha256(challenge_id.encode("utf-8")).hexdigest(),
+        otp_hash=_password_reset_otp_hash(secret, challenge_id, otp),
+        expires_at=now + timedelta(minutes=10),
+    )
+    db.add(reset)
+    db.commit()
+
+    if not send_admin_password_reset_otp(otp=otp):
+        reset.used_at = datetime.utcnow()
+        db.commit()
+        raise HTTPException(
+            status_code=503,
+            detail="The reset email could not be sent. Check the email configuration.",
+        )
+
+    return {
+        "challenge_id": challenge_id,
+        "message": "A reset code was sent to the configured admin email address.",
+    }
+
+
+@router.post("/credentials/password-reset/complete")
+def complete_admin_password_reset(
+    payload: AdminPasswordResetComplete,
+    db: Session = Depends(get_db),
+):
+    secret = _password_reset_secret()
+    now = datetime.utcnow()
+    challenge_hash = hashlib.sha256(payload.challenge_id.encode("utf-8")).hexdigest()
+    reset = (
+        db.query(AdminPasswordReset)
+        .filter(
+            AdminPasswordReset.challenge_hash == challenge_hash,
+            AdminPasswordReset.used_at.is_(None),
+        )
+        .with_for_update()
+        .first()
+    )
+
+    if not reset or reset.expires_at <= now or reset.attempt_count >= 5:
+        raise HTTPException(status_code=400, detail="Invalid or expired reset code.")
+
+    expected_hash = _password_reset_otp_hash(
+        secret,
+        payload.challenge_id,
+        payload.otp,
+    )
+    if not hmac.compare_digest(reset.otp_hash, expected_hash):
+        reset.attempt_count += 1
+        if reset.attempt_count >= 5:
+            reset.used_at = now
+        db.commit()
+        raise HTTPException(status_code=400, detail="Invalid or expired reset code.")
+
+    credential = _admin_password_row(db)
+    new_hash = _hash_admin_password(payload.new_password)
+    if credential:
+        credential.password_hash = new_hash
+    else:
+        db.add(AdminCredential(password_hash=new_hash))
+
+    reset.used_at = now
+    db.query(AdminPasswordReset).filter(
+        AdminPasswordReset.id != reset.id,
+        AdminPasswordReset.used_at.is_(None),
+    ).update({AdminPasswordReset.used_at: now}, synchronize_session=False)
+    db.commit()
+
+    return {"message": "Admin password reset successfully."}
 
 
 def get_current_admin(

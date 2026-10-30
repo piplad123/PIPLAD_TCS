@@ -17,6 +17,7 @@ import requests
 logger = logging.getLogger(__name__)
 
 DEFAULT_FROM_NAME = "Piplad Welfare Foundation"
+ADMIN_PASSWORD_RESET_EMAIL = "pipladfoundation@gmail.com"
 BREVO_API_URL = "https://api.brevo.com/v3/smtp/email"
 
 
@@ -222,6 +223,23 @@ def send_admin_alert_email(
         subject=subject,
         text_body=text_body,
         html_body=f"<p>{escape(text_body).replace(chr(10), '<br/>')}</p>",
+    )
+
+
+def send_admin_password_reset_otp(*, otp: str) -> bool:
+    return _deliver_email(
+        to_email=ADMIN_PASSWORD_RESET_EMAIL,
+        subject="Piplad admin password reset code",
+        text_body=(
+            f"Your admin password reset code is {otp}. It expires in 10 minutes.\n\n"
+            "If you did not request this code, you can ignore this email."
+        ),
+        html_body=(
+            f"<p>Your admin password reset code is "
+            f"<strong>{escape(otp)}</strong>.</p>"
+            "<p>This code expires in 10 minutes. If you did not request it, "
+            "you can ignore this email.</p>"
+        ),
     )
 
 

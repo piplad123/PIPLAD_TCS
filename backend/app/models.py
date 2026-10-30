@@ -528,6 +528,18 @@ class AdminCredential(Base):
     )
 
 
+class AdminPasswordReset(Base):
+    __tablename__ = "admin_password_resets"
+
+    id = Column(Integer, primary_key=True, index=True)
+    challenge_hash = Column(String(64), unique=True, nullable=False, index=True)
+    otp_hash = Column(String(64), nullable=False)
+    expires_at = Column(DateTime, nullable=False, index=True)
+    attempt_count = Column(Integer, nullable=False, default=0)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
+    used_at = Column(DateTime, nullable=True)
+
+
 class HomeSlide(Base):
     """Home-page hero slider slide, editable by the admin.
 

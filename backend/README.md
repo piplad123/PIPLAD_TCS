@@ -46,10 +46,15 @@ runs on Render with **PostgreSQL** (no SQLite).
 | `CORS_ORIGINS` | No | Comma-separated allowed browser origins (defaults to localhost dev ports) |
 | `RAZORPAY_KEY_ID` / `RAZORPAY_KEY_SECRET` | No | Razorpay credentials; absent => mock orders for sandbox testing |
 | `ADMIN_USER` / `ADMIN_PASSWORD` | No | Basic-auth credentials for `/api/admin` and SQL admin |
-| `BREVO_API_KEY` | No | Brevo HTTPS API key; the only email transport. Absent => email sending is skipped (logged) so failures stay visible |
+| `BREVO_API_KEY` | No | Brevo HTTPS API key; required for admin password recovery and other outgoing email |
+| `ADMIN_RESET_OTP_SECRET` | For password recovery | Random secret of at least 32 characters used to protect reset codes; store only in the backend environment |
 | `EMAIL_FROM` / `EMAIL_FROM_NAME` | No | Verified Brevo sender used for outbound email |
 | `CONTACT_WEBSITE`/`CONTACT_EMAIL`/`CONTACT_PHONE` | No | Contact footer for the volunteer welcome email (defaults to the foundation website/email; phone only when set) |
 | `PUBLIC_FRONTEND_URL` | No | Public frontend base URL embedded in certificate / volunteer-card QR codes. Defaults to `https://pip-dev.onrender.com` (the Render-hosted frontend) |
+
+Admin password recovery sends an 8-digit, 10-minute OTP only to
+`pipladfoundation@gmail.com`. Reset requests are limited to three per hour, and
+each OTP allows at most five attempts.
 
 ## Official Documents (certificates & Volunteer ID cards)
 

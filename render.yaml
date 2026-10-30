@@ -29,6 +29,8 @@ services:
       - key: BREVO_API_KEY
         sync: false
         value: CHANGE_ME
+      - key: ADMIN_RESET_OTP_SECRET
+        sync: false
       - key: EMAIL_FROM
         value: info@pipladfoundation.in
       - key: EMAIL_FROM_NAME
