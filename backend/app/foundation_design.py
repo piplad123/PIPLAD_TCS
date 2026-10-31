@@ -1471,14 +1471,14 @@ def _card_top_band(img: Image.Image, palette: dict, logo_bytes: bytes | None, su
         try:
             # Opened lazily; _paste_emblem shrinks it before decoding.
             logo = Image.open(io.BytesIO(logo_bytes))
-            _paste_emblem(img, logo, CARD_L + 50, CARD_T + 62, 44, GOLD_BRIGHT)
+            _paste_emblem(img, logo, CARD_L + 50, CARD_T + 62, 64, GOLD_BRIGHT)
         except Exception:  # noqa: BLE001 - logo must never break rendering
             pass
 
     dr = _draw(img)
-    _draw_tracked(dr, CARD_L + 88, CARD_T + 50, "PIPLAD WELFARE FOUNDATION", sans(19, 700), (255, 255, 255), tracking=5, anchor="ls")
+    _draw_tracked(dr, CARD_L + 104, CARD_T + 50, "PIPLAD WELFARE FOUNDATION", sans(19, 700), (255, 255, 255), tracking=5, anchor="ls")
     if subtitle:
-        _draw_tracked(dr, CARD_L + 89, CARD_T + 86, subtitle, sans(10, 700), _hex("#DDEBE6"), tracking=4, anchor="ls")
+        _draw_tracked(dr, CARD_L + 105, CARD_T + 86, subtitle, sans(10, 700), _hex("#DDEBE6"), tracking=4, anchor="ls")
 
 
 def _id_qr_zone(img: Image.Image, palette: dict, right: float, top: float, bottom: float, qr_data: str, label: str, max_w: float = 290):
